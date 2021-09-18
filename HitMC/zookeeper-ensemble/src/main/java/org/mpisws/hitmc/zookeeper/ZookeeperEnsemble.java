@@ -23,12 +23,16 @@ public class ZookeeperEnsemble implements Ensemble, SchedulerConfigurationPostLo
 
     private static final String ZOOKEEPER_QUORUM_PEER_MAIN = "org.apache.zookeeper.server.quorum.QuorumPeerMain";
 
+    private static final String ZOOKEEPER_CLIENT_MAIN = "org.apache.zookeeper.ZooKeeperMain";
+
     @Autowired
     private ZookeeperConfiguration zookeeperConfiguration;
 
     private int executionId;
 
-    private final List<Process> processes = new ArrayList<>();
+    private final List<Process> nodeProcesses = new ArrayList<>();
+
+    private final List<Process> clientProcesses = new ArrayList<>();
 
     @PostConstruct
     public void init() {
@@ -37,12 +41,13 @@ public class ZookeeperEnsemble implements Ensemble, SchedulerConfigurationPostLo
 
     @Override
     public void postLoadCallback() throws SchedulerConfigurationException {
-        processes.addAll(Collections.<Process>nCopies(zookeeperConfiguration.getNumNodes(), null));
+        nodeProcesses.addAll(Collections.<Process>nCopies(zookeeperConfiguration.getNumNodes(), null));
+        clientProcesses.addAll(Collections.<Process>nCopies(zookeeperConfiguration.getNumClients(), null));
     }
 
     @Override
     public void startNode(final int nodeId) {
-        if (null != processes.get(nodeId)) {
+        if (null != nodeProcesses.get(nodeId)) {
             LOG.warn("Node {} already started", nodeId);
             return;
         }
@@ -65,7 +70,7 @@ public class ZookeeperEnsemble implements Ensemble, SchedulerConfigurationPostLo
                     zookeeperLogDirOption, appleAwtUIElementOption, log4JConfigurationOption,
                     // Class name and options
                     ZOOKEEPER_QUORUM_PEER_MAIN, confFile.getPath());
-            processes.set(nodeId, process);
+            nodeProcesses.set(nodeId, process);
             LOG.debug("Started node {}", nodeId);
         } catch (final IOException e) {
             LOG.error("Could not start node " + nodeId, e);
@@ -74,13 +79,13 @@ public class ZookeeperEnsemble implements Ensemble, SchedulerConfigurationPostLo
 
     @Override
     public void stopNode(final int nodeId) {
-        if (null == processes.get(nodeId)) {
+        if (null == nodeProcesses.get(nodeId)) {
             LOG.warn("Node {} is not running", nodeId);
             return;
         }
 
         LOG.debug("Stopping node {}", nodeId);
-        final Process process = processes.get(nodeId);
+        final Process process = nodeProcesses.get(nodeId);
         process.destroy();
         try {
             process.waitFor();
@@ -88,7 +93,7 @@ public class ZookeeperEnsemble implements Ensemble, SchedulerConfigurationPostLo
         } catch (final InterruptedException e) {
             LOG.warn("Main thread interrupted while waiting for a process to terminate", e);
         } finally {
-            processes.set(nodeId, null);
+            nodeProcesses.set(nodeId, null);
         }
     }
 
@@ -107,13 +112,13 @@ public class ZookeeperEnsemble implements Ensemble, SchedulerConfigurationPostLo
     @Override
     public void stopEnsemble() {
         LOG.debug("Stopping the Zookeeper ensemble");
-        for (final Process process : processes) {
+        for (final Process process : nodeProcesses) {
             if (null != process) {
                 process.destroy();
             }
         }
         for (int i = 0; i < zookeeperConfiguration.getNumNodes(); ++i) {
-            final Process process = processes.get(i);
+            final Process process = nodeProcesses.get(i);
             if (null != process) {
                 try {
                     process.waitFor();
@@ -121,15 +126,43 @@ public class ZookeeperEnsemble implements Ensemble, SchedulerConfigurationPostLo
                 } catch (final InterruptedException e) {
                     LOG.warn("Main thread interrupted while waiting for a process to terminate", e);
                 } finally {
-                    processes.set(i, null);
+                    nodeProcesses.set(i, null);
                 }
             }
         }
     }
 
     @Override
-    public void startClient(int client) {
+    public void startClient(int clientId) {
+        if (null != clientProcesses.get(clientId)) {
+            LOG.warn("Client process {} already started", clientId);
+            return;
+        }
 
+        LOG.debug("Starting client process {}", clientId);
+
+        final File clientDir = new File(zookeeperConfiguration.getWorkingDir(), executionId + File.separator + "clients" + File.separator + clientId);
+        final File logDir = new File(clientDir, "log");
+        final File outputFile = new File(clientDir, "out");
+        final File confFile = new File(clientDir, "conf");
+
+        final String zookeeperLogDirOption = "-Dzookeeper.log.dir=" + logDir;
+        final String appleAwtUIElementOption = "-Dapple.awt.UIElement=true"; // Suppress the Dock icon and menu bar on Mac OS X
+        final String log4JConfigurationOption = "-Dlog4j.configuration=file:" + zookeeperConfiguration.getLog4JConfig();
+
+        try {
+            final Process process = ProcessUtil.startJavaProcess(zookeeperConfiguration.getWorkingDir(),
+                    zookeeperConfiguration.getClasspath(), outputFile,
+                    // Additional JVM options
+                    zookeeperLogDirOption, appleAwtUIElementOption, log4JConfigurationOption,
+                    // Class name and options
+                    ZOOKEEPER_CLIENT_MAIN, "-server 127.0.0.1:4000 get /");
+
+            clientProcesses.set(clientId, process);
+            LOG.debug("Started client process {}", clientId);
+        } catch (final IOException e) {
+            LOG.error("Could not start client process " + clientId, e);
+        }
     }
 
     @Override

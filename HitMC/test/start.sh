@@ -1,10 +1,6 @@
 #!/bin/bash
 
 # run within ./test
-cd .. && mvn install
-cd zookeeper-wrapper && mvn package
-cd ../zookeeper-ensemble && mvn package
-cd ../test
 nohup java -jar ../zookeeper-ensemble/target/zookeeper-ensemble-jar-with-dependencies.jar zookeeper.properties > test.out 2>&1 &
 #java -jar ../zookeeper-ensemble/target/zookeeper-ensemble-jar-with-dependencies.jar zookeeper.properties  >/dev/null 2>&1 &
 #java -jar ../zookeeper-ensemble/target/zookeeper-ensemble-jar-with-dependencies.jar zookeeper.properties

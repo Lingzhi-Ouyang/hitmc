@@ -14,6 +14,12 @@ public interface SchedulerConfiguration {
 
     int getNumReboots();
 
+    int getNumClients();
+
+    int getNumReaders();
+
+    int getNumWriters();
+
     int getMaxEvents();
 
     int getNumPriorityChangePoints();

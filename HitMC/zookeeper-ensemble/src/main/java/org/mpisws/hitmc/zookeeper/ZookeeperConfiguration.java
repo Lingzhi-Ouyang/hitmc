@@ -43,6 +43,9 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
     private int numNodes;
     private int numCrashes;
     private int numReboots;
+    private int numClients;
+    private int numReaders;
+    private int numWriters;
     private int maxEvents;
     private int numPriorityChangePoints;
     private boolean hasRandomSeed = false;
@@ -87,6 +90,12 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
         numNodes = Integer.parseInt(properties.getProperty("numNodes", DEFAULT_NUM_NODES));
         numCrashes = Integer.parseInt(properties.getProperty("numCrashes", DEFAULT_NUM_CRASHES));
         numReboots = Integer.parseInt(properties.getProperty("numReboots", DEFAULT_NUM_REBOOTS));
+
+        numClients = Integer.parseInt(properties.getProperty("numClients", DEFAULT_NUM_CLIENTS));
+        numReaders = Integer.parseInt(properties.getProperty("numReaders", DEFAULT_NUM_READERS));
+        numWriters = Integer.parseInt(properties.getProperty("numWriters", DEFAULT_NUM_WRITERS));
+        LOG.debug("numClients: {}", numClients);
+
         maxEvents = Integer.parseInt(properties.getProperty("maxEvents", DEFAULT_MAX_EVENTS));
         numPriorityChangePoints = Integer.parseInt(properties.getProperty("numPriorityChangePoints", DEFAULT_NUM_PRIORITY_CHANGE_POINTS));
         final String randomSeedProperty = properties.getProperty("randomSeed");
@@ -98,6 +107,7 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
 
         classpath = properties.getProperty("classpath");
         workingDir = new File(properties.getProperty("workingDir", System.getProperty("user.dir")));
+        LOG.debug("Working dir: {}", workingDir);
         log4JConfig = new File(properties.getProperty("log4JConfig", "zk_log.properties"));
         initLimit = Integer.parseInt(properties.getProperty("initLimit", DEFAULT_INIT_LIMIT));
         syncLimit = Integer.parseInt(properties.getProperty("syncLimit", DEFAULT_SYNC_LIMIT));
@@ -140,6 +150,21 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
     @Override
     public int getNumReboots() {
         return numReboots;
+    }
+
+    @Override
+    public int getNumClients() {
+        return numClients;
+    }
+
+    @Override
+    public int getNumReaders() {
+        return numReaders;
+    }
+
+    @Override
+    public int getNumWriters() {
+        return numWriters;
     }
 
     @Override
