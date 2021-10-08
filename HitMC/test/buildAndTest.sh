@@ -1,10 +1,13 @@
 #!/bin/bash
 
+## kill current running zookeeper processes
+ps -ef | grep zookeeper | grep -v grep | awk '{print $2}' | xargs kill -9
+
 SCRIPT_DIR=$(cd $(dirname $0);pwd)
 WORKING_DIR=$(cd $SCRIPT_DIR/../..;pwd)
 
-# build ZooKeeper
-cd $WORKING_DIR/zookeeper-3.4.3 && ant
+## build ZooKeeper
+#cd $WORKING_DIR/zookeeper-3.4.3 && ant
 
 # build HitMC
 cd $WORKING_DIR/HitMC && mvn install

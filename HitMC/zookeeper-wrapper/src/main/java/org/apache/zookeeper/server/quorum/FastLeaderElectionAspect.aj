@@ -70,7 +70,7 @@ public aspect FastLeaderElectionAspect {
 
     before(): lookForLeader() {
         try {
-            LOG.debug("Registring FLE subnode");
+            LOG.debug("Registering FLE subnode");
             fleSubnodeId = scheduler.registerSubnode(myId, false);
             LOG.debug("Registered FLE subnode: id = {}", fleSubnodeId);
             synchronized (nodeOnlineMonitor) {
