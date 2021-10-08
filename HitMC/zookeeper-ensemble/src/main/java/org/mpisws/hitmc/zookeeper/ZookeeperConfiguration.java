@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -242,6 +243,45 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
     @Override
     public String getSchedulingStrategy() {
         return schedulingStrategy;
+    }
+
+    @Override
+    public void configureNode(final int executionId, final int nodeId, String tag) throws SchedulerConfigurationException {
+        final File nodeDir = new File(getWorkingDir(), executionId + File.separator + tag + "s" + File.separator + nodeId);
+        final File dataDir = new File(nodeDir, "data");
+
+        // Create the data directory if it is missing
+        dataDir.mkdirs();
+
+        // Assemble the configuration file properties
+        final Properties properties = new Properties();
+        properties.setProperty("tickTime", String.valueOf(getTickTime()));
+        properties.setProperty("initLimit", String.valueOf(getInitLimit()));
+        properties.setProperty("syncLimit", String.valueOf(getSyncLimit()));
+        properties.setProperty("dataDir", dataDir.getPath());
+        final int clientPort = getClientPort() + nodeId;
+        properties.setProperty("clientPort", String.valueOf(clientPort));
+        for (int i = 0; i < getNumNodes(); ++i) {
+            final int quorumPort = getBaseQuorumPort() + i;
+            final int leaderElectionPort = getBaseLeaderElectionPort() + i;
+            properties.setProperty("server." + i, "localhost:" + quorumPort + ":" + leaderElectionPort);
+        }
+
+        final File confFile = new File(nodeDir, "conf");
+        final File myidFile = new File(dataDir, "myid");
+        try {
+            final FileWriter confFileWriter = new FileWriter(confFile);
+            properties.store(confFileWriter, "Automatically generated configuration for " + tag + nodeId);
+            confFileWriter.close();
+
+            final FileWriter myidFileWriter = new FileWriter(myidFile);
+            myidFileWriter.write(String.valueOf(nodeId));
+            myidFileWriter.close();
+        }
+        catch (final IOException e) {
+            LOG.error("Could not write to a configuration file for {} {}", tag, nodeId);
+            throw new SchedulerConfigurationException(e);
+        }
     }
 
 }

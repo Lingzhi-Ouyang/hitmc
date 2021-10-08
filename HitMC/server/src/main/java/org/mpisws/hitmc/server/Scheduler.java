@@ -29,6 +29,9 @@ public class Scheduler implements SchedulerRemote {
     @Autowired
     private Ensemble ensemble;
 
+    @Autowired
+    private ClientGroup clientGroup;
+
     private SchedulingStrategy schedulingStrategy;
     private MessageExecutor messageExecutor;
     private NodeStartExecutor nodeStartExecutor;
@@ -67,6 +70,7 @@ public class Scheduler implements SchedulerRemote {
 
     private void configureNextExecution(final int executionId) throws SchedulerConfigurationException, IOException {
         ensemble.configureEnsemble(executionId);
+        clientGroup.configureClients(executionId);
 
         // Configure scheduling strategy
         final Random random = new Random();
@@ -205,10 +209,12 @@ public class Scheduler implements SchedulerRemote {
                 LOG.debug("All Nodes steady");
                 while (schedulingStrategy.hasNextEvent() && totalExecuted < 100) {
                     LOG.debug("Step: {}", totalExecuted);
+//                    ensemble.startClients();
                     final Event event = schedulingStrategy.nextEvent();
                     LOG.debug("prepare to execute event: {}", event.toString());
                     if (event.execute()) {
                         LOG.debug("executed event: {}", event.toString());
+//                        ensemble.startClients();
                         /*
                         int currNode;
                         try {
@@ -247,10 +253,13 @@ public class Scheduler implements SchedulerRemote {
                         ++totalExecuted;
                         verifyConsensus();
                     }
+//                    ensemble.stopClients();
                 }
                 waitAllNodesDone();
+
             }
 //            ensemble.stopEnsemble();
+            clientGroup.startClients();
             statistics.endTimer();
             statistics.reportTotalExecutedEvents(totalExecuted);
             verifyConsensus();
@@ -278,6 +287,10 @@ public class Scheduler implements SchedulerRemote {
 
     public Ensemble getEnsemble() {
         return ensemble;
+    }
+
+    public ClientGroup getClientGroup() {
+        return clientGroup;
     }
 
     public NodeStartExecutor getNodeStartExecutor() {

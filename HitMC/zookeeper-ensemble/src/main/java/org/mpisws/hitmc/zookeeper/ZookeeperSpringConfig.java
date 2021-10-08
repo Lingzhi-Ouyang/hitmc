@@ -23,6 +23,11 @@ public class ZookeeperSpringConfig {
     }
 
     @Bean
+    public ZooKeeperClientGroup zooKeeperClientGroup() {
+        return new ZooKeeperClientGroup();
+    }
+
+    @Bean
     public ZookeeperConfiguration zookeeperConfiguration() {
         return new ZookeeperConfiguration();
     }

@@ -13,9 +13,4 @@ public interface Ensemble {
     void startEnsemble();
 
     void stopEnsemble();
-
-    void startClient(int client);
-
-    void stopClient(int client);
-
 }
