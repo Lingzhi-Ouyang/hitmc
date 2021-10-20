@@ -1,8 +1,10 @@
 package org.mpisws.hitmc.server;
 
+import org.apache.zookeeper.*;
 import org.mpisws.hitmc.api.*;
 import org.mpisws.hitmc.api.configuration.SchedulerConfiguration;
 import org.mpisws.hitmc.api.configuration.SchedulerConfigurationException;
+import org.mpisws.hitmc.api.state.ClientRequestType;
 import org.mpisws.hitmc.api.state.LeaderElectionState;
 import org.mpisws.hitmc.api.state.Vote;
 import org.slf4j.Logger;
@@ -37,6 +39,10 @@ public class Scheduler implements SchedulerRemote {
     private NodeStartExecutor nodeStartExecutor;
     private NodeCrashExecutor nodeCrashExecutor;
 
+    // TODO: add client request events
+    private ClientRequestExecutor clientRequestExecutor;
+    private ZooKeeperClient zooKeeperClient;
+
     private Statistics statistics;
     private FileWriter statisticsWriter;
     private FileWriter executionWriter;
@@ -70,7 +76,9 @@ public class Scheduler implements SchedulerRemote {
 
     private void configureNextExecution(final int executionId) throws SchedulerConfigurationException, IOException {
         ensemble.configureEnsemble(executionId);
-        clientGroup.configureClients(executionId);
+
+        // Configure client process (Deprecated)
+//        clientGroup.configureClients(executionId);
 
         // Configure scheduling strategy
         final Random random = new Random();
@@ -196,7 +204,30 @@ public class Scheduler implements SchedulerRemote {
         }
     }
 
-    public void start() throws SchedulerConfigurationException, IOException {
+    private void configureClientRequests() throws IOException, InterruptedException, KeeperException {
+        // Initialize client request events
+        clientRequestExecutor = new ClientRequestExecutor(this, executionWriter);
+
+        zooKeeperClient = new ZooKeeperClient();
+        Thread.sleep(1000);
+        zooKeeperClient.create();
+        final ClientRequestEvent getDataEvent = new ClientRequestEvent(generateEventId(),
+                ClientRequestType.GET_DATA, clientRequestExecutor);
+        addEvent(getDataEvent);
+        final ClientRequestEvent setDataEvent = new ClientRequestEvent(generateEventId(),
+                ClientRequestType.SET_DATA, clientRequestExecutor);
+        addEvent(setDataEvent);
+
+        // TODO: Generate node crash events
+//        if (schedulerConfiguration.getNumCrashes() > 0) {
+//            for (int i = 0; i < schedulerConfiguration.getNumNodes(); i++) {
+//                final NodeCrashEvent nodeCrashEvent = new NodeCrashEvent(generateEventId(), i, nodeCrashExecutor);
+//                schedulingStrategy.add(nodeCrashEvent);
+//            }
+//        }
+    }
+
+    public void start() throws SchedulerConfigurationException, IOException, InterruptedException{
         LOG.debug("Starting the scheduler");
         initRemote();
         for (int executionId = 1; executionId <= schedulerConfiguration.getNumExecutions(); ++executionId) {
@@ -208,13 +239,9 @@ public class Scheduler implements SchedulerRemote {
                 waitAllNodesSteady();
                 LOG.debug("All Nodes steady");
                 while (schedulingStrategy.hasNextEvent() && totalExecuted < 100) {
-                    LOG.debug("Step: {}", totalExecuted);
-//                    ensemble.startClients();
+//                    LOG.debug("Step: {}", totalExecuted);
                     final Event event = schedulingStrategy.nextEvent();
-                    LOG.debug("prepare to execute event: {}", event.toString());
                     if (event.execute()) {
-                        LOG.debug("executed event: {}", event.toString());
-//                        ensemble.startClients();
                         /*
                         int currNode;
                         try {
@@ -251,25 +278,67 @@ public class Scheduler implements SchedulerRemote {
                             LOG.debug("IO exception", e);
                         }*/
                         ++totalExecuted;
-                        verifyConsensus();
+//                        verifyConsensus();
                     }
-//                    ensemble.stopClients();
                 }
                 waitAllNodesDone();
-
             }
-//            ensemble.stopEnsemble();
-            clientGroup.startClients();
+
             statistics.endTimer();
             statistics.reportTotalExecutedEvents(totalExecuted);
             verifyConsensus();
             statisticsWriter.write(statistics.toString() + '\n');
             LOG.info(statistics.toString());
+
+            // TODO: client requests start here.
+            scheduleClientRequests();
+
             executionWriter.close();
             statisticsWriter.close();
             //vectorClockWriter.close();
+
+//          Stop the ensemble.
+//            ensemble.stopEnsemble();
         }
     }
+
+    private void scheduleClientRequests(){
+        // Configure next execution: After the ensemble has been established, re-prepared new events.
+
+        // TODO: Generate different types of client requests.
+        try {
+            // Configure client request events.
+            configureClientRequests();
+
+            // execute the event
+            for (int i = 1; i <= schedulerConfiguration.getNumClientRequests() ; i++) {
+                LOG.debug("Client request: {}", i);
+                final Event event = schedulingStrategy.nextEvent();
+                LOG.debug("prepare to execute event: {}", event.toString());
+                if (event.execute()) {
+                    LOG.debug("executed event: {}", event.toString());
+                }
+            }
+
+        } catch (IOException | InterruptedException | KeeperException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void releaseClientRequest(final ClientRequestEvent event) throws InterruptedException, KeeperException {
+        switch (event.getType()) {
+            case GET_DATA:
+                String result = zooKeeperClient.getData();
+                event.setData(result);
+                break;
+            case SET_DATA:
+                String data = String.valueOf(event.getId());
+                event.setData(data);
+                zooKeeperClient.setData(data);
+                break;
+        }
+    }
+
 
     private void  initRemote() {
         try {
@@ -299,6 +368,10 @@ public class Scheduler implements SchedulerRemote {
 
     public NodeCrashExecutor getNodeCrashExecutor() {
         return nodeCrashExecutor;
+    }
+
+    public ClientRequestExecutor getClientReadExecutor() {
+        return clientRequestExecutor;
     }
 
     public void addEvent(final Event event) {

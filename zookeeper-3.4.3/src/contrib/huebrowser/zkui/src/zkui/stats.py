@@ -150,7 +150,7 @@ class ZooKeeperStats(object):
                 result['zk_znode_count'] = int(m.group(1))
                 continue
 
-        return result 
+        return result
 
     def _parse_line(self, line):
         try:

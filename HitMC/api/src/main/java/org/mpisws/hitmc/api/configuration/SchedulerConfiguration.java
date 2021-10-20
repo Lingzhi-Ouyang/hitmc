@@ -20,6 +20,8 @@ public interface SchedulerConfiguration {
 
     int getNumWriters();
 
+    int getNumClientRequests();
+
     int getMaxEvents();
 
     int getNumPriorityChangePoints();

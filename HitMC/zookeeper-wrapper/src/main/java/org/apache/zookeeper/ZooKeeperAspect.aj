@@ -37,18 +37,17 @@ public aspect ZooKeeperAspect {
 
     // Intercept ZooKeeper.getChildren()
 
-    pointcut getChildren(String p, boolean w): execution(* ZooKeeper.getChildren(String, boolean))
-            && args(p, w);
+//    pointcut getChildren(String p, boolean w): call(* ZooKeeper.getChildren(String, boolean))
+//            && args(p, w);
+//
+//    before(String p, boolean w): getChildren(p, w) {
+//        LOG.debug("Getting children of " + p);
+//    }
 
-    before(String p, boolean w): getChildren(p, w) {
-        LOG.debug("Getting children of " + p);
-        ZooKeeperDemo zooKeeperDemo = null;
-        try {
-            zooKeeperDemo = new ZooKeeperDemo();
-            zooKeeperDemo.testGet();
-        } catch (IOException | KeeperException | InterruptedException e) {
-            e.printStackTrace();
-        }
+    pointcut getChildren(): call(* ZooKeeper.getChildren(..));
+
+    before(): getChildren() {
+        LOG.debug("Getting children ");
     }
 
 //    after(String p, boolean w) returning: getChildren(p, w) {

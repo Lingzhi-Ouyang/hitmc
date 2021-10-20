@@ -38,6 +38,7 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
     private static final String DEFAULT_NUM_CLIENTS = "1";
     private static final String DEFAULT_NUM_READERS = "1";
     private static final String DEFAULT_NUM_WRITERS = "1";
+    private static final String DEFAULT_NUM_CLIENT_REQUESTS = "5";
 
     private static final String DEFAULT_SCHEDULING_STRATEGY = "pctcp";
 
@@ -47,6 +48,7 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
     private int numClients;
     private int numReaders;
     private int numWriters;
+    private int numClientRequests;
     private int maxEvents;
     private int numPriorityChangePoints;
     private boolean hasRandomSeed = false;
@@ -95,7 +97,9 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
         numClients = Integer.parseInt(properties.getProperty("numClients", DEFAULT_NUM_CLIENTS));
         numReaders = Integer.parseInt(properties.getProperty("numReaders", DEFAULT_NUM_READERS));
         numWriters = Integer.parseInt(properties.getProperty("numWriters", DEFAULT_NUM_WRITERS));
-        LOG.debug("numClients: {}", numClients);
+        numClientRequests = Integer.parseInt(properties.getProperty("numClientRequests", DEFAULT_NUM_CLIENT_REQUESTS));
+
+        LOG.debug("numClientRequests: {}", numClientRequests);
 
         maxEvents = Integer.parseInt(properties.getProperty("maxEvents", DEFAULT_MAX_EVENTS));
         numPriorityChangePoints = Integer.parseInt(properties.getProperty("numPriorityChangePoints", DEFAULT_NUM_PRIORITY_CHANGE_POINTS));
@@ -166,6 +170,11 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
     @Override
     public int getNumWriters() {
         return numWriters;
+    }
+
+    @Override
+    public int getNumClientRequests() {
+        return numClientRequests;
     }
 
     @Override
