@@ -1,5 +1,7 @@
 package org.mpisws.hitmc.api.configuration;
 
+import java.io.File;
+
 public interface SchedulerConfiguration {
 
     void load(String[] args) throws SchedulerConfigurationException;
@@ -12,7 +14,11 @@ public interface SchedulerConfiguration {
 
     int getNumCrashes();
 
+    int getNumCrashesAfterElection();
+
     int getNumReboots();
+
+    int getNumRebootsAfterElection();
 
     int getNumClients();
 
@@ -42,6 +48,6 @@ public interface SchedulerConfiguration {
 
     void configureNode(int executionId, int nodeId, String tag) throws SchedulerConfigurationException;
 
-
+    File getWorkingDir();
 
 }

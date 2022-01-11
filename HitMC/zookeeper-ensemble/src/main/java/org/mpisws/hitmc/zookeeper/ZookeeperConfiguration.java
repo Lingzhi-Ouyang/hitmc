@@ -10,7 +10,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Properties;
 
@@ -21,12 +23,14 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
     private static final String DEFAULT_NUM_NODES = "3";
     private static final String DEFAULT_NUM_CRASHES = "0";
     private static final String DEFAULT_NUM_REBOOTS = "0";
+    private static final String DEFAULT_NUM_CRASHES_AFTER_ELECTION = "0";
+    private static final String DEFAULT_NUM_REBOOTS_AFTER_ELECTION = "0";
     private static final String DEFAULT_MAX_EVENTS = "100";
     private static final String DEFAULT_NUM_PRIORITY_CHANGE_POINTS = "1";
-    private static final String DEFAULT_TICK_TIME = "2000";
+    private static final String DEFAULT_TICK_TIME = "1000"; // set it smaller!
 
-    private static final String DEFAULT_INIT_LIMIT = "10";
-    private static final String DEFAULT_SYNC_LIMIT = "5";
+    private static final String DEFAULT_INIT_LIMIT = "5"; // set it smaller!
+    private static final String DEFAULT_SYNC_LIMIT = "2"; // set it smaller!
     private static final String DEFAULT_CLIENT_PORT = "4000";
     private static final String DEFAULT_BASE_QUORUM_PORT = "2000";
     private static final String DEFAULT_BASE_LEADER_ELECTION_PORT = "5000";
@@ -45,6 +49,8 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
     private int numNodes;
     private int numCrashes;
     private int numReboots;
+    private int numCrashesAfterElection;
+    private int numRebootsAfterElection;
     private int numClients;
     private int numReaders;
     private int numWriters;
@@ -80,6 +86,11 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
             throw new SchedulerConfigurationException();
         }
 
+        if (args.length < 2) {
+            LOG.error("Please provide a tag as a command-line argument.");
+            throw new SchedulerConfigurationException();
+        }
+
         final Properties properties = new Properties();
 
         try {
@@ -93,6 +104,8 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
         numNodes = Integer.parseInt(properties.getProperty("numNodes", DEFAULT_NUM_NODES));
         numCrashes = Integer.parseInt(properties.getProperty("numCrashes", DEFAULT_NUM_CRASHES));
         numReboots = Integer.parseInt(properties.getProperty("numReboots", DEFAULT_NUM_REBOOTS));
+        numCrashesAfterElection = Integer.parseInt(properties.getProperty("numCrashesAfterElection", DEFAULT_NUM_CRASHES_AFTER_ELECTION));
+        numRebootsAfterElection = Integer.parseInt(properties.getProperty("numRebootsAfterElection", DEFAULT_NUM_REBOOTS_AFTER_ELECTION));
 
         numClients = Integer.parseInt(properties.getProperty("numClients", DEFAULT_NUM_CLIENTS));
         numReaders = Integer.parseInt(properties.getProperty("numReaders", DEFAULT_NUM_READERS));
@@ -111,8 +124,10 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
         tickTime = Long.parseLong(properties.getProperty("tickTime", DEFAULT_TICK_TIME));
 
         classpath = properties.getProperty("classpath");
-        workingDir = new File(properties.getProperty("workingDir", System.getProperty("user.dir")));
+
+        workingDir = new File(properties.getProperty("workingDir", System.getProperty("user.dir")), args[1]);
         LOG.debug("Working dir: {}", workingDir);
+
         log4JConfig = new File(properties.getProperty("log4JConfig", "zk_log.properties"));
         initLimit = Integer.parseInt(properties.getProperty("initLimit", DEFAULT_INIT_LIMIT));
         syncLimit = Integer.parseInt(properties.getProperty("syncLimit", DEFAULT_SYNC_LIMIT));
@@ -155,6 +170,16 @@ public class ZookeeperConfiguration implements SchedulerConfiguration {
     @Override
     public int getNumReboots() {
         return numReboots;
+    }
+
+    @Override
+    public int getNumCrashesAfterElection() {
+        return numCrashesAfterElection;
+    }
+
+    @Override
+    public int getNumRebootsAfterElection() {
+        return numRebootsAfterElection;
     }
 
     @Override
