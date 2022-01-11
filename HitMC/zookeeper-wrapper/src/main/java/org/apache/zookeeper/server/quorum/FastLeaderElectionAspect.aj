@@ -90,7 +90,7 @@ public aspect FastLeaderElectionAspect {
             scheduler.updateVote(myId, constructVote(vote));
             LOG.debug("Deregistring FLE subnode");
             scheduler.deregisterSubnode(fleSubnodeId);
-            LOG.debug("Deregistered FLE subnode");
+            LOG.debug("-------------------Deregistered FLE subnode\n-------------\n");
         } catch (final RemoteException e) {
             LOG.debug("Encountered a remote exception", e);
             throw new RuntimeException(e);
@@ -235,14 +235,49 @@ public aspect FastLeaderElectionAspect {
         LOG.debug("Received a notification with id = {}", notification.getMessageId());
     }
 
-    // Intercept state update
+//    // Intercept state update in the election (within FastLeaderElection)
+//
+//    pointcut setPeerState(QuorumPeer.ServerState state):
+//            within(FastLeaderElection)
+//            && call(* QuorumPeer.setPeerState(QuorumPeer.ServerState))
+//            && args(state);
+//
+//    after(final QuorumPeer.ServerState state) returning: setPeerState(state) {
+//        final LeaderElectionState leState;
+//        switch (state) {
+//            case LEADING:
+//                leState = LeaderElectionState.LEADING;
+//                break;
+//            case FOLLOWING:
+//                leState = LeaderElectionState.FOLLOWING;
+//                break;
+//            case OBSERVING:
+//                leState = LeaderElectionState.OBSERVING;
+//                break;
+//            case LOOKING:
+//            default:
+//                leState = LeaderElectionState.LOOKING;
+//                break;
+//        }
+//        try {
+//            LOG.debug("Node {} state: {}", myId, state);
+//            scheduler.updateLeaderElectionState(myId, leState);
+//            if(leState == LeaderElectionState.LOOKING){
+//                scheduler.updateVote(myId, null);
+//            }
+//        } catch (final RemoteException e) {
+//            LOG.error("Encountered a remote exception", e);
+//            throw new RuntimeException(e);
+//        }
+//    }
 
-    pointcut setPeerState(QuorumPeer.ServerState state):
-            within(FastLeaderElection)
-            && call(* QuorumPeer.setPeerState(QuorumPeer.ServerState))
-            && args(state);
+    // Intercept state update (within FastLeaderElection && QuorumPeer)
 
-    after(final QuorumPeer.ServerState state) returning: setPeerState(state) {
+    pointcut setPeerState2(QuorumPeer.ServerState state):
+                    call(* QuorumPeer.setPeerState(QuorumPeer.ServerState))
+                    && args(state);
+
+    after(final QuorumPeer.ServerState state) returning: setPeerState2(state) {
         final LeaderElectionState leState;
         switch (state) {
             case LEADING:
@@ -260,12 +295,50 @@ public aspect FastLeaderElectionAspect {
                 break;
         }
         try {
+            LOG.debug("Node {} state: {}", myId, state);
             scheduler.updateLeaderElectionState(myId, leState);
+            if(leState == LeaderElectionState.LOOKING){
+                scheduler.updateVote(myId, null);
+            }
         } catch (final RemoteException e) {
             LOG.error("Encountered a remote exception", e);
             throw new RuntimeException(e);
         }
     }
+
+//    // this pointcut will include routine heartbeat settings of the role states
+//
+//    pointcut setPeerState3(QuorumPeer.ServerState s):
+//            set(QuorumPeer.ServerState state) && args(s);
+//
+//    after(final QuorumPeer.ServerState s): setPeerState3(s) {
+//        final LeaderElectionState leState;
+//        switch (s) {
+//            case LEADING:
+//                leState = LeaderElectionState.LEADING;
+//                break;
+//            case FOLLOWING:
+//                leState = LeaderElectionState.FOLLOWING;
+//                break;
+//            case OBSERVING:
+//                leState = LeaderElectionState.OBSERVING;
+//                break;
+//            case LOOKING:
+//            default:
+//                leState = LeaderElectionState.LOOKING;
+//                break;
+//        }
+//        try {
+//            LOG.debug("Node {} state: {}", myId, s);
+//            scheduler.updateLeaderElectionState(myId, leState);
+//            if(leState == LeaderElectionState.LOOKING){
+//                scheduler.updateVote(myId, null);
+//            }
+//        } catch (final RemoteException e) {
+//            LOG.error("Encountered a remote exception", e);
+//            throw new RuntimeException(e);
+//        }
+//    }
 
     public String constructPayload(final FastLeaderElection.ToSend toSend) {
         return "from=" + myId +

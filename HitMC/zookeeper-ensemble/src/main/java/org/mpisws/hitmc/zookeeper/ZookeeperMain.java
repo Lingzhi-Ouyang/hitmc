@@ -20,8 +20,8 @@ public class ZookeeperMain {
         try {
             scheduler.loadConfig(args);
             scheduler.start();
-            Thread.sleep(Long.MAX_VALUE);
-//            System.exit(0);
+//            Thread.sleep(Long.MAX_VALUE);
+            System.exit(0);
         } catch (final SchedulerConfigurationException e) {
             LOG.error("Error while reading configuration.", e);
         } catch (final IOException e) {

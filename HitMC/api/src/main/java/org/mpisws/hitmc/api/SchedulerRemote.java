@@ -88,5 +88,9 @@ public interface SchedulerRemote extends Remote {
 
     void updateVote(int nodeId, Vote vote) throws RemoteException;
 
+    void initializeVote(int nodeId, Vote vote) throws RemoteException;
+
     void updateLeaderElectionState(int nodeId, LeaderElectionState state) throws RemoteException;
+
+    void initializeLeaderElectionState(int nodeId, LeaderElectionState state) throws RemoteException;
 }
