@@ -14,4 +14,9 @@ cd $WORKING_DIR/HitMC && mvn install
 cd $WORKING_DIR/HitMC/zookeeper-wrapper && mvn package
 cd $WORKING_DIR/HitMC/zookeeper-ensemble && mvn package
 cd $WORKING_DIR/HitMC/test
-nohup java -jar ../zookeeper-ensemble/target/zookeeper-ensemble-jar-with-dependencies.jar zookeeper.properties > test.out 2>&1 &
+#rm -fr 1
+
+tag=`date "+%y-%m-%d-%H-%M-%S"`
+mkdir $tag
+cp zk_log.properties $tag
+nohup java -jar ../zookeeper-ensemble/target/zookeeper-ensemble-jar-with-dependencies.jar zookeeper.properties $tag > $tag/$tag.out 2>&1 &
