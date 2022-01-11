@@ -74,12 +74,7 @@ public class Scheduler implements SchedulerRemote {
         schedulerConfiguration.load(args);
     }
 
-    private void configureNextExecution(final int executionId) throws SchedulerConfigurationException, IOException {
-        ensemble.configureEnsemble(executionId);
-
-        // Configure client process (Deprecated)
-//        clientGroup.configureClients(executionId);
-
+    private void configureSchedulingStrategy(final int executionId) {
         // Configure scheduling strategy
         final Random random = new Random();
         final long seed;
@@ -156,10 +151,9 @@ public class Scheduler implements SchedulerRemote {
             schedulingStrategy = new RandomWalkStrategy(random, randomWalkStatistics);
         }
         statistics.reportRandomSeed(seed);
+    }
 
-        executionWriter = new FileWriter(executionId + File.separator + schedulerConfiguration.getExecutionFile());
-        statisticsWriter = new FileWriter(executionId + File.separator + schedulerConfiguration.getStatisticsFile());
-        //vectorClockWriter = new FileWriter(executionId + File.separator + "vectorClock"); //simin
+    private void configureNextExecution() throws SchedulerConfigurationException, IOException {
 
         // Configure executors
         messageExecutor = new MessageExecutor(this, executionWriter);
@@ -204,125 +198,182 @@ public class Scheduler implements SchedulerRemote {
         }
     }
 
-    private void configureClientRequests() throws IOException, InterruptedException, KeeperException {
-        // Initialize client request events
-        clientRequestExecutor = new ClientRequestExecutor(this, executionWriter);
+    private void configureAfterElection() throws SchedulerConfigurationException, IOException {
+//        // Initialize client request events
+//        clientRequestExecutor = new ClientRequestExecutor(this, executionWriter);
+//
+//        zooKeeperClient = new ZooKeeperClient();
+//        Thread.sleep(1000);
+//        zooKeeperClient.create();
+//        final ClientRequestEvent getDataEvent = new ClientRequestEvent(generateEventId(),
+//                ClientRequestType.GET_DATA, clientRequestExecutor);
+//        addEvent(getDataEvent);
+//        final ClientRequestEvent setDataEvent = new ClientRequestEvent(generateEventId(),
+//                ClientRequestType.SET_DATA, clientRequestExecutor);
+//        addEvent(setDataEvent);
 
-        zooKeeperClient = new ZooKeeperClient();
-        Thread.sleep(1000);
-        zooKeeperClient.create();
-        final ClientRequestEvent getDataEvent = new ClientRequestEvent(generateEventId(),
-                ClientRequestType.GET_DATA, clientRequestExecutor);
-        addEvent(getDataEvent);
-        final ClientRequestEvent setDataEvent = new ClientRequestEvent(generateEventId(),
-                ClientRequestType.SET_DATA, clientRequestExecutor);
-        addEvent(setDataEvent);
+        // Configure executors
+        messageExecutor = new MessageExecutor(this, executionWriter);
+        nodeStartExecutor = new NodeStartExecutor(this, executionWriter, schedulerConfiguration.getNumRebootsAfterElection());
+        nodeCrashExecutor = new NodeCrashExecutor(this, executionWriter, schedulerConfiguration.getNumCrashesAfterElection());
 
-        // TODO: Generate node crash events
-//        if (schedulerConfiguration.getNumCrashes() > 0) {
-//            for (int i = 0; i < schedulerConfiguration.getNumNodes(); i++) {
-//                final NodeCrashEvent nodeCrashEvent = new NodeCrashEvent(generateEventId(), i, nodeCrashExecutor);
-//                schedulingStrategy.add(nodeCrashEvent);
-//            }
-//        }
+        // Generate node crash events
+        if (schedulerConfiguration.getNumCrashes() > 0) {
+            for (int i = 0; i < schedulerConfiguration.getNumNodes(); i++) {
+                final NodeCrashEvent nodeCrashEvent = new NodeCrashEvent(generateEventId(), i, nodeCrashExecutor);
+                schedulingStrategy.add(nodeCrashEvent);
+            }
+        }
     }
 
     public void start() throws SchedulerConfigurationException, IOException, InterruptedException{
         LOG.debug("Starting the scheduler");
         initRemote();
+
         for (int executionId = 1; executionId <= schedulerConfiguration.getNumExecutions(); ++executionId) {
-            configureNextExecution(executionId);
-            statistics.startTimer();
+            ensemble.configureEnsemble(executionId);
+            configureSchedulingStrategy(executionId);
+
+            executionWriter = new FileWriter(schedulerConfiguration.getWorkingDir() + File.separator
+                    + executionId + File.separator + schedulerConfiguration.getExecutionFile());
+            statisticsWriter = new FileWriter(schedulerConfiguration.getWorkingDir() + File.separator
+                    + executionId + File.separator + schedulerConfiguration.getStatisticsFile());
+
+            configureNextExecution();
+
             ensemble.startEnsemble();
+
             int totalExecuted = 0;
+
+            // execution of first election
+            statistics.startTimer();
+            totalExecuted = scheduleFirstElection(totalExecuted);
+            statistics.endTimer();
+
+            // property check
+            statistics.reportTotalExecutedEvents(totalExecuted);
+            verifyConsensus();
+            statisticsWriter.write(statistics.toString() + '\n');
+            LOG.info(statistics.toString());
+            LOG.debug("\n\n\n\n\n");
+
+
+            // Configure client request events.
+            configureAfterElection();
+
+            // execution after first election
+            // statistics.startTimer();
+            totalExecuted = scheduleAfterElection(totalExecuted);
+            statistics.endTimer();
+
+            // property check
+            statistics.reportTotalExecutedEvents(totalExecuted);
+            verifyConsensus();
+            statisticsWriter.write(statistics.toString() + '\n');
+            LOG.debug("\n\n\n\n\n");
+            LOG.info(statistics.toString());
+            LOG.debug("\n\n\n\n\n");
+
+            executionWriter.close();
+            statisticsWriter.close();
+
+            ensemble.stopEnsemble();
+        }
+    }
+
+    private int scheduleFirstElection(int totalExecuted) {
+        try{
             synchronized (controlMonitor) {
                 waitAllNodesSteady();
                 LOG.debug("All Nodes steady");
                 while (schedulingStrategy.hasNextEvent() && totalExecuted < 100) {
-//                    LOG.debug("Step: {}", totalExecuted);
+                    long begintime = System.currentTimeMillis();
+                    executionWriter.write("---Step: " + totalExecuted + "--->");
+                    LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted);
                     final Event event = schedulingStrategy.nextEvent();
                     if (event.execute()) {
-                        /*
-                        int currNode;
-                        try {
-                            vectorClockWriter.write("Executed " + event.toString() + "\n");
-                        }
-                        catch (final IOException e) {
-                            LOG.debug("IO exception", e);
-                        }
-                        if (event instanceof MessageEvent) {
-                            currNode = ((MessageEvent)event).getReceivingNodeId();
-                            vectorClock[currNode][currNode]++;
-                            List <Integer> tmp = vectorClockEvent.get(event);
-                            vectorClock[currNode][0] = Math.max(vectorClock[currNode][0], tmp.get(0));
-                            vectorClock[currNode][1] = Math.max(vectorClock[currNode][1], tmp.get(1));
-                            vectorClock[currNode][2] = Math.max(vectorClock[currNode][2], tmp.get(2));
-                            vectorClockEvent.remove(event);
-                        }
-                        else if (event instanceof NodeCrashEvent){
-                            currNode = ((NodeCrashEvent)event).getNodeId();
-                            vectorClock[currNode][currNode]++;
-                        }
-                        else if (event instanceof NodeStartEvent){
-                            currNode = ((NodeStartEvent)event).getNodeId();
-                            vectorClock[currNode][currNode]++;
-                        }
-                        else{
-                            LOG.debug("- - - - - - - - - - - - - - - - - - - - - -");
-                            continue;
-                        }
-                        try{
-                            vectorClockWriter.write(vectorClock[currNode][0] + " " + vectorClock[currNode][1] + " " + vectorClock[currNode][2] + "\n");
-                        }
-                        catch (final IOException e) {
-                            LOG.debug("IO exception", e);
-                        }*/
                         ++totalExecuted;
 //                        verifyConsensus();
+                        long endtime=System.currentTimeMillis();
+                        long costTime = (endtime - begintime);
+                        executionWriter.write("-----cost_time: " + costTime + "\n");
+                    }
+                }
+                waitAllNodesDone();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return totalExecuted;
+    }
+
+    private int scheduleAfterElection(int totalExecuted) throws SchedulerConfigurationException{
+        // Configure next execution: After the ensemble has been established, re-prepared new events.
+
+        // TODO: Generate different types of client requests.
+        try {
+
+            // execute the event
+//            for (int i = 1; i <= schedulerConfiguration.getNumClientRequests() ; i++) {
+//                LOG.debug("Client request: {}", i);
+//                final Event event = schedulingStrategy.nextEvent();
+//                LOG.debug("prepare to execute event: {}", event.toString());
+//                if (event.execute()) {
+//                    LOG.debug("executed event: {}", event.toString());
+//                }
+//            }
+
+            synchronized (controlMonitor) {
+
+                waitAllNodesSteady();
+                LOG.debug("All Nodes steady");
+                while (schedulingStrategy.hasNextEvent() && totalExecuted < 100) {
+                    long begintime = System.currentTimeMillis();
+                    for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); ++nodeId) {
+                        LOG.debug("--------------->Node Id: {}, NodeState: {}, " +
+                                        "role: {}, " +
+                                        "vote: {}",nodeId, nodeStates.get(nodeId),
+                                leaderElectionStates.get(nodeId),
+                                votes.get(nodeId)
+                        );
+                    }
+                    executionWriter.write("---Step: " + totalExecuted + "--->");
+                    LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted);
+                    final Event event = schedulingStrategy.nextEvent();
+                    // Only the leader will be crashed
+                    if (event instanceof NodeCrashEvent){
+                        LeaderElectionState RoleOfCrashNode = leaderElectionStates.get(((NodeCrashEvent) event).getNodeId());
+                        LOG.debug("----role: {}---------", RoleOfCrashNode);
+                        if ( RoleOfCrashNode != LeaderElectionState.LEADING){
+                            ((NodeCrashEvent) event).setExecuted();
+                            LOG.debug("----pass this event---------\n\n\n");
+                            continue;
+                        }
+                        if (event.execute()) {
+                            ++totalExecuted;
+
+                            // wait for new message from online nodes after the leader crashed
+                            waitNewMessageOffered();
+
+                            long endtime=System.currentTimeMillis();
+                            long costTime = (endtime - begintime);
+                            executionWriter.write("-------waitNewMessageOffered cost_time: " + costTime + "\n");
+                        }
+                    }
+                    else if (event.execute()) {
+                        ++totalExecuted;
+                        long endtime=System.currentTimeMillis();
+                        long costTime = (endtime - begintime);
+                        executionWriter.write("------cost_time: " + costTime + "\n");
                     }
                 }
                 waitAllNodesDone();
             }
 
-            statistics.endTimer();
-            statistics.reportTotalExecutedEvents(totalExecuted);
-            verifyConsensus();
-            statisticsWriter.write(statistics.toString() + '\n');
-            LOG.info(statistics.toString());
-
-            // TODO: client requests start here.
-            scheduleClientRequests();
-
-            executionWriter.close();
-            statisticsWriter.close();
-            //vectorClockWriter.close();
-
-//          Stop the ensemble.
-//            ensemble.stopEnsemble();
-        }
-    }
-
-    private void scheduleClientRequests(){
-        // Configure next execution: After the ensemble has been established, re-prepared new events.
-
-        // TODO: Generate different types of client requests.
-        try {
-            // Configure client request events.
-            configureClientRequests();
-
-            // execute the event
-            for (int i = 1; i <= schedulerConfiguration.getNumClientRequests() ; i++) {
-                LOG.debug("Client request: {}", i);
-                final Event event = schedulingStrategy.nextEvent();
-                LOG.debug("prepare to execute event: {}", event.toString());
-                if (event.execute()) {
-                    LOG.debug("executed event: {}", event.toString());
-                }
-            }
-
-        } catch (IOException | InterruptedException | KeeperException e) {
+        } catch (IOException e) {
             e.printStackTrace();
         }
+        return totalExecuted;
     }
 
     public void releaseClientRequest(final ClientRequestEvent event) throws InterruptedException, KeeperException {
@@ -520,6 +571,7 @@ public class Scheduler implements SchedulerRemote {
     @Override
     public void nodeOnline(final int nodeId) throws RemoteException {
         synchronized (controlMonitor) {
+            LOG.debug("--------- set online {}", nodeId);
             nodeStates.set(nodeId, NodeState.ONLINE);
             controlMonitor.notifyAll();
         }
@@ -528,6 +580,7 @@ public class Scheduler implements SchedulerRemote {
     @Override
     public void nodeOffline(final int nodeId) throws RemoteException {
         synchronized (controlMonitor) {
+            LOG.debug("--------- set offline {}", nodeId);
             nodeStates.set(nodeId, NodeState.OFFLINE);
             controlMonitor.notifyAll();
         }
@@ -543,11 +596,17 @@ public class Scheduler implements SchedulerRemote {
         wait(allNodesDone, 1000L);
     }
 
-    public void startNode(final int nodeId) {
-        nodeStates.set(nodeId, NodeState.STARTING);
-        ensemble.startNode(nodeId);
+    private void waitAllNodesDone(final long timeout) {
+        wait(allNodesDone, timeout);
     }
 
+    public void startNode(final int nodeId) throws RemoteException {
+        LOG.debug("------- set STARTING {}", nodeId);
+        nodeStates.set(nodeId, NodeState.STARTING);
+        votes.set(nodeId, null);
+        leaderElectionStates.set(nodeId, LeaderElectionState.LOOKING);
+        ensemble.startNode(nodeId);
+    }
 
     public void stopNode(final int nodeId) {
         boolean hasSending = false;
@@ -558,15 +617,22 @@ public class Scheduler implements SchedulerRemote {
             }
         }
         if (hasSending) {
+            LOG.debug("-----set STOPPING {}", nodeId);
             nodeStates.set(nodeId, NodeState.STOPPING);
             controlMonitor.notifyAll();
             waitAllNodesSteady();
         }
+        LOG.debug("--------stopNode {} done waiting", nodeId);
         for (final Subnode subnode : subnodeSets.get(nodeId)) {
             subnode.setState(SubnodeState.UNREGISTERED);
         }
         subnodeSets.get(nodeId).clear();
+        LOG.debug("--------- set offline {}", nodeId);
+
         nodeStates.set(nodeId, NodeState.OFFLINE);
+        votes.set(nodeId, null);
+        leaderElectionStates.set(nodeId, LeaderElectionState.LOOKING);
+
         ensemble.stopNode(nodeId);
         controlMonitor.notifyAll();
     }
@@ -580,6 +646,9 @@ public class Scheduler implements SchedulerRemote {
         synchronized (controlMonitor) {
             votes.set(nodeId, vote);
             controlMonitor.notifyAll();
+            if(vote == null){
+                return;
+            }
             try {
                 executionWriter.write("Node " + nodeId + " final vote: " + vote.toString() + '\n');
             } catch (final IOException e) {
@@ -589,18 +658,42 @@ public class Scheduler implements SchedulerRemote {
     }
 
     @Override
+    public void initializeVote(int nodeId, Vote vote) throws RemoteException {
+        synchronized (controlMonitor) {
+            votes.set(nodeId, vote);
+            controlMonitor.notifyAll();
+        }
+    }
+
+    @Override
     public void updateLeaderElectionState(final int nodeId, final LeaderElectionState state) throws RemoteException {
+        LOG.debug("before setting Node {} state: {}", nodeId, state);
         synchronized (controlMonitor) {
             leaderElectionStates.set(nodeId, state);
             try {
+                LOG.debug("Writing execution file------Node {} state: {}", nodeId, state);
                 executionWriter.write("Node " + nodeId + " state: " + state + '\n');
+            } catch (final IOException e) {
+                LOG.debug("IO exception", e);
+            }
+        }
+        LOG.debug("after setting Node {} state: {}", nodeId, state);
+    }
+
+    @Override
+    public void initializeLeaderElectionState(int nodeId, LeaderElectionState state) throws RemoteException {
+        synchronized (controlMonitor) {
+            leaderElectionStates.set(nodeId, state);
+            try {
+                LOG.debug("Node {} initialized state: {}", nodeId, state);
+                executionWriter.write("Node " + nodeId + " initialized state: " + state + '\n');
             } catch (final IOException e) {
                 LOG.debug("IO exception", e);
             }
         }
     }
 
-    private void verifyConsensus() {
+    private boolean verifyConsensus() {
         // There should be a unique leader; everyone else should be following or observing that leader
         int leader = -1;
         boolean consensus = true;
@@ -649,10 +742,12 @@ public class Scheduler implements SchedulerRemote {
         if (leader != -1 && consensus) {
             LOG.debug("SUC");
             statistics.reportResult("SUCCESS");
+            return true;
         }
         else {
             LOG.debug("FAIL");
             statistics.reportResult("FAILURE");
+            return false;
         }
     }
 
@@ -686,19 +781,24 @@ public class Scheduler implements SchedulerRemote {
             for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); ++nodeId) {
                 final NodeState nodeState = nodeStates.get(nodeId);
                 if (NodeState.STARTING.equals(nodeState) || NodeState.STOPPING.equals(nodeState)) {
+                    LOG.debug("------not yet Steady-----Node {} status: {}",
+                            nodeId, nodeState);
                     return false;
+                }
+                else {
+                    LOG.debug("-----------Node {} status: {}",
+                            nodeId, nodeState);
                 }
                 for (final Subnode subnode : subnodeSets.get(nodeId)) {
                     if (SubnodeState.PROCESSING.equals(subnode.getState())) {
+                        LOG.debug("------not yet Steady-----Node {} status: {}, subnode {} status: {}, is main receiver : {}",
+                                nodeId, nodeState, subnode.getId(), subnode.getState(), subnode.isMainReceiver());
                         return false;
                     }
-                }
-            }
-            for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); ++nodeId) {
-                final NodeState nodeState = nodeStates.get(nodeId);
-                for (final Subnode subnode : subnodeSets.get(nodeId)) {
-                    LOG.debug("Node {} status: {}, subnode {} status: {}, is main receiver : {}",
-                            nodeId, nodeState, subnode.getId(), subnode.getState(), subnode.isMainReceiver());
+                    else {
+                        LOG.debug("-----------Node {} status: {}, subnode {} status: {}, is main receiver : {}",
+                                nodeId, nodeState, subnode.getId(), subnode.getState(), subnode.isMainReceiver());
+                    }
                 }
             }
             return true;
@@ -717,6 +817,7 @@ public class Scheduler implements SchedulerRemote {
         @Override
         public boolean isTrue() {
             for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); ++nodeId) {
+                LOG.debug("nodeId: {}, state: {}, votes: {}", nodeId, nodeStates.get(nodeId), votes.get(nodeId));
                 if (!NodeState.OFFLINE.equals(nodeStates.get(nodeId))
                         && (!NodeState.ONLINE.equals(nodeStates.get(nodeId)) || votes.get(nodeId) == null)) {
                     return false;
@@ -757,6 +858,40 @@ public class Scheduler implements SchedulerRemote {
         wait(firstMessageOffered, 0L);
     }
 
+    private class NewMessageOffered implements WaitPredicate {
+
+        @Override
+        public boolean isTrue() {
+            // if there exists one node offering a new message
+            for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); ++nodeId) {
+                final NodeState nodeState = nodeStates.get(nodeId);
+                if (NodeState.ONLINE.equals(nodeState)) {
+                    for (final Subnode subnode : subnodeSets.get(nodeId)) {
+                        if (SubnodeState.SENDING.equals(subnode.getState())) {
+                            LOG.debug("------NewMessageOffered-----Node {} status: {}, subnode {} status: {}, is main receiver : {}",
+                                    nodeId, nodeState, subnode.getId(), subnode.getState(), subnode.isMainReceiver());
+                            return true;
+                        }
+                        LOG.debug("-----------Node {} status: {}, subnode {} status: {}, is main receiver : {}",
+                                nodeId, nodeState, subnode.getId(), subnode.getState(), subnode.isMainReceiver());
+                    }
+                }
+            }
+            LOG.debug("------New message has not yet come-----");
+            return false;
+        }
+
+        @Override
+        public String describe() {
+            return "newMessageOffered";
+        }
+    }
+
+    public void waitNewMessageOffered() {
+        final WaitPredicate newMessageOffered = new NewMessageOffered();
+        wait(newMessageOffered, 0L);
+    }
+
     private class MessageReleased implements WaitPredicate {
 
         private final int msgId;
@@ -784,7 +919,7 @@ public class Scheduler implements SchedulerRemote {
     }
 
     private void wait(final WaitPredicate predicate, final long timeout) {
-        LOG.debug("Waiting for {}", predicate.describe());
+        LOG.debug("Waiting for {}\n\n\n", predicate.describe());
         final long startTime = System.currentTimeMillis();
         long endTime = startTime;
         while (!predicate.isTrue() && (timeout == 0L || endTime - startTime < timeout)) {
@@ -800,8 +935,9 @@ public class Scheduler implements SchedulerRemote {
                 endTime = System.currentTimeMillis();
             }
         }
-        LOG.debug("Done waiting for {}", predicate.describe());
+        LOG.debug("Done waiting for {}\n\n\n\n\n", predicate.describe());
     }
+
     public int nodIdOfSubNode (int subNodeID){
         return getSubNodeByID.get(subNodeID);
     }
