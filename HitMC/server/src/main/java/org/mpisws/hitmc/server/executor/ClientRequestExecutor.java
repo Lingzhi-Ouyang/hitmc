@@ -13,8 +13,7 @@ public class ClientRequestExecutor extends BaseEventExecutor {
 
     private final TestingService testingService;
 
-    public ClientRequestExecutor(final TestingService testingService, final FileWriter executionWriter) {
-        super(executionWriter);
+    public ClientRequestExecutor(final TestingService testingService) {
         this.testingService = testingService;
     }
 
@@ -31,8 +30,6 @@ public class ClientRequestExecutor extends BaseEventExecutor {
 //        }
 //        testingService.waitAllNodesLogSyncSteady();
         testingService.waitAllNodesSteadyAfterClientRequest();
-        getExecutionWriter().write(event.toString() + '\n');
-        getExecutionWriter().flush();
 
         // TODO: add later event
 //        final ClientRequestEvent clientRequestEvent = new ClientRequestEvent(testingService.generateEventId(),

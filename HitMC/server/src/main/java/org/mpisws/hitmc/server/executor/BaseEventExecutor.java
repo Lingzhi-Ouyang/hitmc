@@ -8,16 +8,6 @@ import java.io.IOException;
 
 public class BaseEventExecutor {
 
-    private final FileWriter executionWriter;
-
-    public BaseEventExecutor(final FileWriter executionWriter) {
-        this.executionWriter = executionWriter;
-    }
-
-    public FileWriter getExecutionWriter() {
-        return executionWriter;
-    }
-
     public boolean execute(final NodeCrashEvent event) throws IOException {
         throw new NotImplementedException();
     }

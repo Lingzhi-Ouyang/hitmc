@@ -188,8 +188,7 @@ public class TestingService implements TestingRemoteService {
 
             ensemble.startEnsemble();
 
-            long endtime=System.currentTimeMillis();
-            executionWriter.write("\n-----cost_time: " + (endtime - startTime) + "\n");
+            executionWriter.write("-----Initialization cost time: " + (System.currentTimeMillis() - startTime) + "\n\n");
 
             // Step 0
             // execution of first election
@@ -200,7 +199,7 @@ public class TestingService implements TestingRemoteService {
             // TODO: property check : They all have lastProcessedZxid=0
             statistics.reportTotalExecutedEvents(totalExecuted);
             leaderElectionVerifier.verify();
-            statisticsWriter.write(statistics.toString() + '\n');
+            statisticsWriter.write(statistics.toString() + "\n\n");
             LOG.info(statistics.toString());
             LOG.debug("\n\n\n\n\n");
 
@@ -212,7 +211,7 @@ public class TestingService implements TestingRemoteService {
             // TODO: property check : S0 writes PROPOSAL T(zxid=1) to the datafile. Neither S1 or S2 receives PROPOSAL T(zxid=1).
             statistics.reportTotalExecutedEvents(totalExecuted);
             leaderElectionVerifier.verify();
-            statisticsWriter.write(statistics.toString() + '\n');
+            statisticsWriter.write(statistics.toString() + "\n\n");
             LOG.debug("\n\n\n\n\n");
             LOG.info(statistics.toString());
             LOG.debug("\n\n\n\n\n");
@@ -225,8 +224,7 @@ public class TestingService implements TestingRemoteService {
             zkClient.deregister();
             ensemble.stopEnsemble();
         }
-        long endTime = System.currentTimeMillis();
-        LOG.debug("total time: {}" , (endTime - startTime));
+        LOG.debug("total time: {}" , (System.currentTimeMillis() - startTime));
     }
 
     private void initRemote() {
@@ -346,16 +344,16 @@ public class TestingService implements TestingRemoteService {
     private void configureNextExecution() {
 
         // Configure external event executors
-        nodeStartExecutor = new NodeStartExecutor(this, executionWriter, schedulerConfiguration.getNumReboots());
-        nodeCrashExecutor = new NodeCrashExecutor(this, executionWriter, schedulerConfiguration.getNumCrashes());
-        clientRequestExecutor = new ClientRequestExecutor(this, executionWriter);
-        partitionStartExecutor = new PartitionStartExecutor(this, executionWriter);
-        partitionStopExecutor = new PartitionStopExecutor(this, executionWriter);
+        nodeStartExecutor = new NodeStartExecutor(this, schedulerConfiguration.getNumReboots());
+        nodeCrashExecutor = new NodeCrashExecutor(this, schedulerConfiguration.getNumCrashes());
+        clientRequestExecutor = new ClientRequestExecutor(this);
+        partitionStartExecutor = new PartitionStartExecutor(this);
+        partitionStopExecutor = new PartitionStopExecutor(this);
 
         // Configure external event executors
-        messageExecutor = new MessageExecutor(this, executionWriter);
-        logRequestExecutor = new LogRequestExecutor(this, executionWriter);
-        learnerHandlerMessageExecutor = new LearnerHandlerMessageExecutor(this, executionWriter);
+        messageExecutor = new MessageExecutor(this);
+        logRequestExecutor = new LogRequestExecutor(this);
+        learnerHandlerMessageExecutor = new LearnerHandlerMessageExecutor(this);
 
         leaderElectionVerifier = new LeaderElectionVerifier(this, statistics);
 
@@ -458,21 +456,15 @@ public class TestingService implements TestingRemoteService {
         try{
             synchronized (controlMonitor) {
                 waitAllNodesSteady();
-                LOG.debug("All Nodes steady");
                 while (schedulingStrategy.hasNextEvent() && totalExecuted < 100) {
                     long begintime = System.currentTimeMillis();
-                    executionWriter.write("\n---Step: " + totalExecuted + "--->\n");
                     LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted);
                     final Event event = schedulingStrategy.nextEvent();
                     if (event.execute()) {
                         ++totalExecuted;
-//                        verifyConsensus();
-                        long endtime=System.currentTimeMillis();
-                        long costTime = (endtime - begintime);
-                        executionWriter.write("-----cost_time: " + costTime + "\n");
+                        recordProperties(totalExecuted, begintime, event);
                     }
                 }
-                executionWriter.write("\n");
                 waitAllNodesDone();
             }
         } catch (IOException e) {
@@ -620,29 +612,17 @@ public class TestingService implements TestingRemoteService {
     private int triggerDiff(int totalExecuted) {
         try {
             synchronized (controlMonitor) {
-                for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); nodeId++) {
-                    executionWriter.write(nodeProperties.get(nodeId).toString() + " # ");
-                }
-
                 waitAllNodesSteady();
 
                 // Step 1. client request SET_DATA
-                LOG.debug("All Nodes steady for client set_Data");
+                long begintime = System.currentTimeMillis();
                 final ClientRequestEvent clientRequestEvent = new ClientRequestEvent(generateEventId(),
                         ClientRequestType.SET_DATA, clientRequestExecutor);
-                long begintime = System.currentTimeMillis();
-                executionWriter.write("\n\n---Step: " + totalExecuted + "--->\n");
-                LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted);
+                LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted + 1);
                 LOG.debug("prepare to execute event: {}", clientRequestEvent.toString());
                 if (clientRequestEvent.execute()) {
                     ++totalExecuted;
-                    long endtime=System.currentTimeMillis();
-                    long costTime = (endtime - begintime);
-                    executionWriter.write("-----cost_time: " + costTime + "\n");
-                    // Property verification
-                    for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); nodeId++) {
-                        executionWriter.write(nodeProperties.get(nodeId).toString() + " # ");
-                    }
+                    recordProperties(totalExecuted, begintime, clientRequestEvent);
                 }
 
                 // Step 2. Leader crash
@@ -652,19 +632,12 @@ public class TestingService implements TestingRemoteService {
                 // This part is for random test
                 while (schedulingStrategy.hasNextEvent() && totalExecuted < 100) {
                     begintime = System.currentTimeMillis();
-                    executionWriter.write("\n\n---Step: " + totalExecuted + "--->\n");
-                    LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted);
                     final Event event = schedulingStrategy.nextEvent();
+                    LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted);
                     LOG.debug("prepare to execute event: {}", event.toString());
                     if (event.execute()) {
                         ++totalExecuted;
-                        long endtime=System.currentTimeMillis();
-                        long costTime = (endtime - begintime);
-                        executionWriter.write("-----cost_time: " + costTime + "\n");
-                        // Property verification
-                        for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); nodeId++) {
-                            executionWriter.write(nodeProperties.get(nodeId).toString() + " # ");
-                        }
+                        recordProperties(totalExecuted, begintime, event);
                     }
                 }
                 executionWriter.write("\n");
@@ -1172,7 +1145,7 @@ public class TestingService implements TestingRemoteService {
             leaderElectionStates.set(nodeId, state);
             try {
                 LOG.debug("Writing execution file------Node {} state: {}", nodeId, state);
-                executionWriter.write("Node " + nodeId + " state: " + state + '\n');
+                executionWriter.write("\nNode " + nodeId + " state: " + state + '\n');
             } catch (final IOException e) {
                 LOG.debug("IO exception", e);
             }
@@ -1211,7 +1184,7 @@ public class TestingService implements TestingRemoteService {
             nodeProperties.set(nodeId, lastProcessedZxid);
             nodeStateForClientRequests.set(nodeId, NodeStateForClientRequest.SET_DONE);
             try {
-                executionWriter.write("nodeId: " + nodeId + " lastProcessedZxid: " + lastProcessedZxid);
+                executionWriter.write("\nnodeId: " + nodeId + " lastProcessedZxid: " + lastProcessedZxid);
                 for (int i = 0; i < schedulerConfiguration.getNumNodes(); i++) {
                     executionWriter.write("|||" + nodeProperties.get(i).toString());
                 }
@@ -1223,6 +1196,17 @@ public class TestingService implements TestingRemoteService {
         }
     }
 
+    public void recordProperties(final int step, final long startTime, final Event event) throws IOException {
+        executionWriter.write("\n---Step: " + step + "--->");
+        executionWriter.write(event.toString());
+        executionWriter.write("\nlastProcessedZxid: ");
+        // Property verification
+        for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); nodeId++) {
+            executionWriter.write(nodeProperties.get(nodeId).toString() + " # ");
+        }
+        executionWriter.write("\ntime/ms: " + (System.currentTimeMillis() - startTime) + "\n");
+        executionWriter.flush();
+    }
 
     /***
      * The following predicates are general to some type of events.

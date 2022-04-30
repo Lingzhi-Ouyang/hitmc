@@ -13,8 +13,7 @@ public class NodeCrashExecutor extends BaseEventExecutor {
 
     private int crashBudget;
 
-    public NodeCrashExecutor(final TestingService testingService, final FileWriter executionWriter, final int crashBudget) {
-        super(executionWriter);
+    public NodeCrashExecutor(final TestingService testingService, final int crashBudget) {
         this.testingService = testingService;
         this.crashBudget = crashBudget;
     }
@@ -32,8 +31,6 @@ public class NodeCrashExecutor extends BaseEventExecutor {
                 nodeStartEvent.addDirectPredecessor(event);
                 testingService.addEvent(nodeStartEvent);
             }
-            getExecutionWriter().write(event.toString() + '\n');
-            getExecutionWriter().flush();
             testingService.stopNode(nodeId);
             testingService.waitAllNodesSteady();
             truelyExecuted = true;

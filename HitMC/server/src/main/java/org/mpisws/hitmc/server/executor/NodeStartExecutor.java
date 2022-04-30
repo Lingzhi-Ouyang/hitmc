@@ -17,8 +17,7 @@ public class NodeStartExecutor extends BaseEventExecutor {
 
     private int rebootBudget;
 
-    public NodeStartExecutor(final TestingService testingService, final FileWriter executionWriter, final int rebootBudget) {
-        super(executionWriter);
+    public NodeStartExecutor(final TestingService testingService, final int rebootBudget) {
         this.testingService = testingService;
         this.rebootBudget = rebootBudget;
     }
@@ -29,8 +28,6 @@ public class NodeStartExecutor extends BaseEventExecutor {
         if (hasReboots()) {
             final int nodeId = event.getNodeId();
             testingService.setLastNodeStartEvent(nodeId, event);
-            getExecutionWriter().write(event.toString() + '\n');
-            getExecutionWriter().flush();
             testingService.startNode(nodeId);
             testingService.waitAllNodesSteady();
             rebootBudget--;

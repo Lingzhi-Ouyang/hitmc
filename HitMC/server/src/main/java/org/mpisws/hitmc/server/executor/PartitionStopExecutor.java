@@ -16,8 +16,7 @@ public class PartitionStopExecutor extends BaseEventExecutor {
     //TODO: + partitionBudget
     private int partitionStopBudget = 10;
 
-    public PartitionStopExecutor(final TestingService testingService, final FileWriter executionWriter) {
-        super(executionWriter);
+    public PartitionStopExecutor(final TestingService testingService) {
         this.testingService = testingService;
     }
 
@@ -25,8 +24,6 @@ public class PartitionStopExecutor extends BaseEventExecutor {
     public boolean execute(final PartitionStopEvent event) throws IOException {
         boolean truelyExecuted = false;
         if (enablePartitionStop()) {
-            getExecutionWriter().write(event.toString() + '\n');
-            getExecutionWriter().flush();
             testingService.stopPartition(event.getNode1(), event.getNode2());
             testingService.waitAllNodesSteady();
             partitionStopBudget--;

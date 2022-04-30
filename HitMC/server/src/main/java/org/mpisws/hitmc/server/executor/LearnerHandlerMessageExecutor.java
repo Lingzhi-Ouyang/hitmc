@@ -14,8 +14,7 @@ public class LearnerHandlerMessageExecutor extends BaseEventExecutor {
 
     private final TestingService testingService;
 
-    public LearnerHandlerMessageExecutor(final TestingService testingService, final FileWriter executionWriter) {
-        super(executionWriter);
+    public LearnerHandlerMessageExecutor(final TestingService testingService) {
         this.testingService = testingService;
     }
 
@@ -26,8 +25,6 @@ public class LearnerHandlerMessageExecutor extends BaseEventExecutor {
             return false;
         }
         LOG.debug("Releasing message: {}", event.toString());
-        getExecutionWriter().write(event.toString() + '\n');
-        getExecutionWriter().flush();
         testingService.releaseMessageToFollower(event);
         testingService.waitAllNodesSteady();
         event.setExecuted();

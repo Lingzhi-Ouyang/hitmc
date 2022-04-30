@@ -13,8 +13,7 @@ public class LogRequestExecutor extends BaseEventExecutor{
 
     private final TestingService testingService;
 
-    public  LogRequestExecutor(final TestingService testingService, final FileWriter executionWriter) {
-        super(executionWriter);
+    public  LogRequestExecutor(final TestingService testingService) {
         this.testingService = testingService;
     }
 
@@ -25,8 +24,6 @@ public class LogRequestExecutor extends BaseEventExecutor{
             return false;
         }
         LOG.debug("Logging request: {}", event.toString());
-        getExecutionWriter().write(event.toString() + '\n');
-        getExecutionWriter().flush();
         testingService.releaseLogRequest(event);
         testingService.waitAllNodesSteady();
         event.setExecuted();

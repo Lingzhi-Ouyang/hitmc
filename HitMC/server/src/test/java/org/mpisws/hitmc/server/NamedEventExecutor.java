@@ -7,7 +7,6 @@ public class NamedEventExecutor extends BaseEventExecutor {
     private final StringBuilder stringBuilder;
 
     public NamedEventExecutor(final StringBuilder stringBuilder) {
-        super(null);
         this.stringBuilder = stringBuilder;
     }
 

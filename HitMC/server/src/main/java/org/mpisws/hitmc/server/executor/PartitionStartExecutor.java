@@ -16,8 +16,7 @@ public class PartitionStartExecutor extends BaseEventExecutor {
     //TODO: + partitionBudget
     private int partitionBudget = 10;
 
-    public PartitionStartExecutor(final TestingService testingService, final FileWriter executionWriter) {
-        super(executionWriter);
+    public PartitionStartExecutor(final TestingService testingService) {
         this.testingService = testingService;
     }
 
@@ -25,8 +24,6 @@ public class PartitionStartExecutor extends BaseEventExecutor {
     public boolean execute(final PartitionStartEvent event) throws IOException {
         boolean truelyExecuted = false;
         if (enablePartition()) {
-            getExecutionWriter().write(event.toString() + '\n');
-            getExecutionWriter().flush();
             testingService.startPartition(event.getNode1(), event.getNode2());
             testingService.waitAllNodesSteady();
             partitionBudget--;
