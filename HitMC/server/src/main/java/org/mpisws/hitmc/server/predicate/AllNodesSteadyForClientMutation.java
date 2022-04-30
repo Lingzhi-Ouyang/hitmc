@@ -26,14 +26,14 @@ public class AllNodesSteadyForClientMutation implements WaitPredicate {
         for (int nodeId = 0; nodeId < testingService.getSchedulerConfiguration().getNumNodes(); ++nodeId) {
             final NodeState nodeState = testingService.getNodeStates().get(nodeId);
             if (NodeState.STARTING.equals(nodeState) || NodeState.STOPPING.equals(nodeState) ) {
-                LOG.debug("------not yet Steady-----Node {} status: {}",
+                LOG.debug("------not steady-----Node {} status: {}",
                         nodeId, nodeState);
                 return false;
             }
             final NodeStateForClientRequest nodeStateForClientRequest
                     = testingService.getNodeStateForClientRequests().get(nodeId);
             if ( NodeStateForClientRequest.SET_PROCESSING.equals(nodeStateForClientRequest)){
-                LOG.debug("------not yet Steady-----Node {} nodeStateForClientRequest: {}",
+                LOG.debug("------not steady-----Node {} nodeStateForClientRequest: {}",
                         nodeId, nodeStateForClientRequest);
                 return false;
             }

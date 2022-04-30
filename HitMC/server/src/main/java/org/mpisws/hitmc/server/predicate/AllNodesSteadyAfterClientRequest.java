@@ -29,14 +29,19 @@ public class AllNodesSteadyAfterClientRequest implements WaitPredicate {
     public boolean isTrue() {
         for (int nodeId = 0; nodeId < testingService.getSchedulerConfiguration().getNumNodes(); ++nodeId) {
             final NodeState nodeState = testingService.getNodeStates().get(nodeId);
-            if (NodeState.STARTING.equals(nodeState) || NodeState.STOPPING.equals(nodeState)) {
-                LOG.debug("------not yet Steady-----Node {} status: {}",
-                        nodeId, nodeState);
-                return false;
-            } else {
-                LOG.debug("-----------Node {} status: {}", nodeId, nodeState);
+            switch (nodeState) {
+                case STARTING:
+                case STOPPING:
+                    LOG.debug("------Not steady-----Node {} status: {}", nodeId, nodeState);
+                    return false;
+                case OFFLINE:
+                    LOG.debug("-----------Node {} status: {}", nodeId, nodeState);
+                    continue;
+                case ONLINE:
+                    LOG.debug("-----------Node {} status: {}", nodeId, nodeState);
             }
             LeaderElectionState leaderElectionState = testingService.getLeaderElectionStates().get(nodeId);
+            // TODO: LOOKING ???
             if (LeaderElectionState.LEADING.equals(leaderElectionState)) {
                 if (!leaderSteadyAfterClientRequest(nodeId)) {
                     return false;

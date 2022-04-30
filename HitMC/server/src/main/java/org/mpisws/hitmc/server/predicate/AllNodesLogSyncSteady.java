@@ -30,7 +30,7 @@ public class AllNodesLogSyncSteady implements WaitPredicate {
         for (int nodeId = 0; nodeId < testingService.getSchedulerConfiguration().getNumNodes(); ++nodeId) {
             final NodeState nodeState = testingService.getNodeStates().get(nodeId);
             if (NodeState.STARTING.equals(nodeState) || NodeState.STOPPING.equals(nodeState)) {
-                LOG.debug("------Not yet Steady-----Node {} status: {}",
+                LOG.debug("------Not steady-----Node {} status: {}",
                         nodeId, nodeState);
                 return false;
             }

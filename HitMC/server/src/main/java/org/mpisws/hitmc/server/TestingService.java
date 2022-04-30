@@ -196,6 +196,7 @@ public class TestingService implements TestingRemoteService {
             statistics.startTimer();
             totalExecuted = scheduleFirstElection(totalExecuted);
             statistics.endTimer();
+
             // TODO: property check : They all have lastProcessedZxid=0
             statistics.reportTotalExecutedEvents(totalExecuted);
             leaderElectionVerifier.verify();
@@ -203,16 +204,11 @@ public class TestingService implements TestingRemoteService {
             LOG.info(statistics.toString());
             LOG.debug("\n\n\n\n\n");
 
-            // Step 1
-            // client request events
-//            long start=System.currentTimeMillis();
-//            long end=System.currentTimeMillis();
-//            long costTime = (end - start);
-//            executionWriter.write("\n-----cost_time: " + costTime + "\n");
-
+            // trigger DIFF
             configureClientRequests();
-            totalExecuted = schedule1_1(totalExecuted);
+            totalExecuted = triggerDiff(totalExecuted);
             statistics.endTimer();
+
             // TODO: property check : S0 writes PROPOSAL T(zxid=1) to the datafile. Neither S1 or S2 receives PROPOSAL T(zxid=1).
             statistics.reportTotalExecutedEvents(totalExecuted);
             leaderElectionVerifier.verify();
@@ -221,7 +217,7 @@ public class TestingService implements TestingRemoteService {
             LOG.info(statistics.toString());
             LOG.debug("\n\n\n\n\n");
 
-            // Step 2
+            // phantom read
 
             executionWriter.close();
             statisticsWriter.close();
@@ -401,7 +397,7 @@ public class TestingService implements TestingRemoteService {
         votes.addAll(Collections.<Vote>nCopies(schedulerConfiguration.getNumNodes(), null));
 
         leaderElectionStates.clear();
-        leaderElectionStates.addAll(Collections.nCopies(schedulerConfiguration.getNumNodes(), LeaderElectionState.LOOKING));
+        leaderElectionStates.addAll(Collections.nCopies(schedulerConfiguration.getNumNodes(), LeaderElectionState.NULL));
 
         // Configure lastNodeStartEvents
         lastNodeStartEvents.clear();
@@ -619,19 +615,18 @@ public class TestingService implements TestingRemoteService {
     }
 
     /***
-     * Step 1.1
+     * the steps to trigger DIFF
      */
-    private int schedule1_1(int totalExecuted) {
+    private int triggerDiff(int totalExecuted) {
         try {
             synchronized (controlMonitor) {
                 for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); nodeId++) {
                     executionWriter.write(nodeProperties.get(nodeId).toString() + " # ");
                 }
 
-                // TODO: This should be changed
-                waitAllNodesSteadyForClientMutation();
+                waitAllNodesSteady();
 
-
+                // Step 1. client request SET_DATA
                 LOG.debug("All Nodes steady for client set_Data");
                 final ClientRequestEvent clientRequestEvent = new ClientRequestEvent(generateEventId(),
                         ClientRequestType.SET_DATA, clientRequestExecutor);
@@ -650,13 +645,14 @@ public class TestingService implements TestingRemoteService {
                     }
                 }
 
-                for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); nodeId++) {
-                    executionWriter.write(nodeProperties.get(nodeId).toString() + " # ");
-                }
+                // Step 2. Leader crash
+                // Step 3. Leader restart
+                // Step 4. re-election and becomes leader.
 
+                // This part is for random test
                 while (schedulingStrategy.hasNextEvent() && totalExecuted < 100) {
                     begintime = System.currentTimeMillis();
-                    executionWriter.write("\n---Step: " + totalExecuted + "--->\n");
+                    executionWriter.write("\n\n---Step: " + totalExecuted + "--->\n");
                     LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted);
                     final Event event = schedulingStrategy.nextEvent();
                     LOG.debug("prepare to execute event: {}", event.toString());
@@ -673,7 +669,7 @@ public class TestingService implements TestingRemoteService {
                 }
                 executionWriter.write("\n");
 
-                // 放所有事件执行最后
+                // Wait util all nodes are done before property check
                 waitAllNodesDone();
             }
 
@@ -948,6 +944,10 @@ public class TestingService implements TestingRemoteService {
                 for (int i = 0 ; i < schedulerConfiguration.getNumNodes(); i++) {
                     nodeStateForClientRequests.set(i, NodeStateForClientRequest.SET_PROCESSING);
                 }
+
+                // TODO: This should set the leader learnerHandlerSender / syncProcessor into PROCESSING state
+                // TODO: what if leader does not exist?
+
                 String data = String.valueOf(event.getId());
                 event.setData(data);
                 zkClient.getRequestQueue().offer(event);
@@ -1091,7 +1091,7 @@ public class TestingService implements TestingRemoteService {
         nodeStateForClientRequests.set(nodeId, NodeStateForClientRequest.SET_DONE);
 
         votes.set(nodeId, null);
-        leaderElectionStates.set(nodeId, LeaderElectionState.LOOKING);
+        leaderElectionStates.set(nodeId, LeaderElectionState.NULL);
 
         // 2. EXECUTION
         ensemble.stopNode(nodeId);
