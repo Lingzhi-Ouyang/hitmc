@@ -1,6 +1,6 @@
-package org.mpisws.hitmc.server;
+package org.mpisws.hitmc.server.event;
 
-import org.mpisws.hitmc.api.Event;
+import org.mpisws.hitmc.server.executor.BaseEventExecutor;
 
 import java.util.*;
 

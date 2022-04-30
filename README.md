@@ -41,4 +41,4 @@ Then start the test:
 
 1. Enter test
 2. configure your test parameters in `zookeeper.properties`
-3. Execute `./start.sh`
+3. Execute `./test.sh`
