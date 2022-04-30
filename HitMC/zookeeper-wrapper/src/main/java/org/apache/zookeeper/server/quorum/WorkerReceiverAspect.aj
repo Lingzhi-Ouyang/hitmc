@@ -12,6 +12,8 @@ public aspect WorkerReceiverAspect {
 
     private static final Logger LOG = LoggerFactory.getLogger(WorkerReceiverAspect.class);
 
+    private final QuorumPeerAspect quorumPeerAspect = QuorumPeerAspect.aspectOf();
+
     private Integer lastSentMessageId = null;
 
     private int workerReceiverSubnodeId;
@@ -29,18 +31,17 @@ public aspect WorkerReceiverAspect {
         return msgsInRecvQueue;
     }
 
-    // Intercept starting the thread
+    // Intercept starting the WorkerReceiver thread
 
     pointcut runWorkerReceiver(): execution(* FastLeaderElection.Messenger.WorkerReceiver.run());
 
     before(): runWorkerReceiver() {
-        final FastLeaderElectionAspect fleAspect = FastLeaderElectionAspect.aspectOf();
-        workerReceiverSubnodeId = fleAspect.registerWorkerReceiverSubnode();
+        LOG.debug("-------Thread: {}------", Thread.currentThread().getName());
+        workerReceiverSubnodeId = quorumPeerAspect.registerWorkerReceiverSubnode();
     }
 
     after(): runWorkerReceiver() {
-        final FastLeaderElectionAspect fleAspect = FastLeaderElectionAspect.aspectOf();
-        fleAspect.deregisterWorkerReceiverSubnode(workerReceiverSubnodeId);
+        quorumPeerAspect.deregisterWorkerReceiverSubnode(workerReceiverSubnodeId);
     }
 
     // Intercept message offering within WorkerReceiver
@@ -60,14 +61,15 @@ public aspect WorkerReceiverAspect {
             predecessorIds.add(lastSentMessageId);
         }
 
-        final FastLeaderElectionAspect fleAspect = FastLeaderElectionAspect.aspectOf();
         try {
             LOG.debug("WorkerReceiver subnode {} is offering a message with predecessors {}", workerReceiverSubnodeId, predecessorIds.toString());
-            fleAspect.setWorkerReceiverSending();
-            final String payload = fleAspect.constructPayload(toSend);
-            lastSentMessageId = fleAspect.getScheduler().offerMessage(workerReceiverSubnodeId, (int) toSend.sid, predecessorIds, payload);
-            LOG.debug("Scheduler returned id = {}", lastSentMessageId);
-            fleAspect.workerReceiverPostSend(workerReceiverSubnodeId, lastSentMessageId);
+            // before offerMessage: increase sendingSubnodeNum
+            quorumPeerAspect.setSubnodeSending();
+            final String payload = quorumPeerAspect.constructPayload(toSend);
+            lastSentMessageId = quorumPeerAspect.getTestingService().offerMessage(workerReceiverSubnodeId, (int) toSend.sid, predecessorIds, payload);
+            LOG.debug("lastSentMessageId = {}", lastSentMessageId);
+            // after offerMessage: decrease sendingSubnodeNum and shutdown this node if sendingSubnodeNum == 0
+            quorumPeerAspect.postSend(workerReceiverSubnodeId, lastSentMessageId);
         } catch (final RemoteException e) {
             LOG.debug("Encountered a remote exception", e);
             throw new RuntimeException(e);
@@ -83,9 +85,8 @@ public aspect WorkerReceiverAspect {
             && args(object);
 
     before(final Object object): forwardNotification(object) {
-        final FastLeaderElectionAspect fleAspect = FastLeaderElectionAspect.aspectOf();
         try {
-            fleAspect.getScheduler().setProcessingState(fleAspect.getFleSubnodeId());
+            quorumPeerAspect.getTestingService().setProcessingState(quorumPeerAspect.getQuorumPeerSubnodeId());
         } catch (final RemoteException e) {
             LOG.debug("Encountered a remote exception", e);
             throw new RuntimeException(e);
@@ -99,12 +100,11 @@ public aspect WorkerReceiverAspect {
             && call(* QuorumCnxManager.pollRecvQueue(..));
 
     before(): pollRecvQueue() {
-        final FastLeaderElectionAspect fleAspect = FastLeaderElectionAspect.aspectOf();
         if (msgsInRecvQueue.get() == 0) {
             // Going to block here. Better notify the scheduler
             LOG.debug("My QCM.recvQueue is empty, go to RECEIVING state");
             try {
-                fleAspect.getScheduler().setReceivingState(workerReceiverSubnodeId);
+                quorumPeerAspect.getTestingService().setReceivingState(workerReceiverSubnodeId);
             } catch (final RemoteException e) {
                 LOG.debug("Encountered a remote exception", e);
                 throw new RuntimeException(e);
@@ -114,7 +114,6 @@ public aspect WorkerReceiverAspect {
 
     after() returning (final QuorumCnxManager.Message response): pollRecvQueue() {
         if (null != response) {
-            final FastLeaderElectionAspect fleAspect = FastLeaderElectionAspect.aspectOf();
             LOG.debug("Received a message with id = {}", response.getMessageId());
             msgsInRecvQueue.decrementAndGet();
             this.response = response;

@@ -1,6 +1,7 @@
 package org.mpisws.hitmc.server;
 
 import org.junit.Test;
+import org.mpisws.hitmc.server.event.DummyEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

@@ -1,7 +1,8 @@
 package org.mpisws.hitmc.zookeeper;
 
+import org.apache.zookeeper.KeeperException;
 import org.mpisws.hitmc.api.configuration.SchedulerConfigurationException;
-import org.mpisws.hitmc.server.Scheduler;
+import org.mpisws.hitmc.server.TestingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
@@ -15,11 +16,13 @@ public class ZookeeperMain {
 
     public static void main(final String[] args) {
         final ApplicationContext applicationContext = new AnnotationConfigApplicationContext(ZookeeperSpringConfig.class);
-        final Scheduler scheduler = applicationContext.getBean(Scheduler.class);
+        final TestingService testingService = applicationContext.getBean(TestingService.class);
 
         try {
-            scheduler.loadConfig(args);
-            scheduler.start();
+            LOG.debug("for test......");
+            testingService.loadConfig(args);
+            testingService.start();
+
 //            Thread.sleep(Long.MAX_VALUE);
             System.exit(0);
         } catch (final SchedulerConfigurationException e) {
@@ -27,7 +30,9 @@ public class ZookeeperMain {
         } catch (final IOException e) {
             LOG.error("IO exception", e);
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            LOG.error("Interrupted exception", e);
+        } catch (KeeperException e) {
+            LOG.error("Keeper exception", e);
         }
     }
 

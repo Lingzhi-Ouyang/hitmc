@@ -1,5 +1,7 @@
 package org.mpisws.hitmc.server;
 
+import org.mpisws.hitmc.server.executor.BaseEventExecutor;
+
 public class NamedEventExecutor extends BaseEventExecutor {
 
     private final StringBuilder stringBuilder;

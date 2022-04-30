@@ -1,7 +1,10 @@
 package org.mpisws.hitmc.server;
 
 import org.junit.Test;
-import org.mpisws.hitmc.api.Event;
+import org.mpisws.hitmc.server.event.Event;
+import org.mpisws.hitmc.server.scheduler.PCTCPStrategy;
+import org.mpisws.hitmc.server.scheduler.SchedulingStrategy;
+import org.mpisws.hitmc.server.statistics.PCTCPStatistics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

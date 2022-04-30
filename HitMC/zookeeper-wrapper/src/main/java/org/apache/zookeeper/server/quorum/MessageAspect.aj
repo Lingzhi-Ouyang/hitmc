@@ -23,9 +23,9 @@ public aspect MessageAspect {
             initialization(QuorumCnxManager.Message.new(..)) && this(message);
 
     after(final QuorumCnxManager.Message message) returning: messageInitialization(message) {
-        final FastLeaderElectionAspect fleAspect = FastLeaderElectionAspect.aspectOf();
+        final QuorumPeerAspect quorumPeerAspect = QuorumPeerAspect.aspectOf();
         try {
-            message.messageId = fleAspect.getScheduler().getMessageInFlight();
+            message.messageId = quorumPeerAspect.getTestingService().getMessageInFlight();
             LOG.debug("Got messageInFlight id = {}", message.messageId);
         } catch (final RemoteException e) {
             LOG.debug("Encountered a remote exception", e);

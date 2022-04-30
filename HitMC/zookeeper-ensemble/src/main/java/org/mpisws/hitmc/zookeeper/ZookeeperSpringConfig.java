@@ -1,6 +1,7 @@
 package org.mpisws.hitmc.zookeeper;
 
-import org.mpisws.hitmc.server.Scheduler;
+import org.mpisws.hitmc.server.TestingService;
+import org.mpisws.hitmc.server.predicate.AllNodesSteady;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -33,8 +34,8 @@ public class ZookeeperSpringConfig {
     }
 
     @Bean
-    public Scheduler scheduler() {
-        return new Scheduler();
+    public TestingService testingService() {
+        return new TestingService();
     }
 
 }

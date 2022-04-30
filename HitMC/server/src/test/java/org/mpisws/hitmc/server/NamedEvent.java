@@ -1,5 +1,7 @@
 package org.mpisws.hitmc.server;
 
+import org.mpisws.hitmc.server.event.AbstractEvent;
+
 public class NamedEvent extends AbstractEvent {
 
     private final String name;
