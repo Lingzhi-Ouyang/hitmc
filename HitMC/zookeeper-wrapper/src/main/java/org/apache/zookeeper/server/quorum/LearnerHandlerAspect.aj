@@ -81,9 +81,7 @@ public aspect LearnerHandlerAspect {
         final long threadId = Thread.currentThread().getId();
         final String threadName = Thread.currentThread().getName();
         LOG.debug("after runLearnerHandler-------Thread: {}, {}------", threadId, threadName);
-        quorumPeerAspect.deregisterLearnerHandlerSubnode(threadId);
-        quorumPeerAspect.deregisterSubnode(
-                Thread.currentThread().getId());
+        quorumPeerAspect.deregisterSubnode(Thread.currentThread().getId());
     }
 
 
@@ -309,7 +307,7 @@ public aspect LearnerHandlerAspect {
 //    }
 
     /***
-     * For LearnerHandlerSenderAspect
+     * For LearnerHandlerSender
      * Set RECEIVING state when the queue is empty
      */
     pointcut takeOrPollFromQueue(LinkedBlockingQueue queue):
@@ -512,9 +510,11 @@ public aspect LearnerHandlerAspect {
     }
 
     /***
-     * For LearnerHandler receiving followers' message during SYNC & BROADCAST phases
-     * SYNC phase:
-     * BROADCAST phase: ACK, PING, REVALIDATE, REQUEST
+     * For LearnerHandler sending followers' message during SYNC phase
+     * package type:
+     * (for ZAB1.0) LEADERINFO (17)
+     * (for ZAB < 1.0) NEWLEADER (10)
+     * (for ZAB1.0) DIFF (13) / TRUNC (14) / SNAP (15)
      */
     pointcut learnerHandlerWriteRecord(Record r, String s):
             within(org.apache.zookeeper.server.quorum.LearnerHandler) && withincode(void java.lang.Runnable.run()) &&

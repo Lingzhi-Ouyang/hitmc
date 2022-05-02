@@ -1,22 +1,20 @@
 package org.mpisws.hitmc.server.predicate;
 
 import org.mpisws.hitmc.api.NodeState;
-import org.mpisws.hitmc.api.configuration.SchedulerConfiguration;
 import org.mpisws.hitmc.server.TestingService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 
 /***
  * Wait Predicate for the end of an execution.
  */
-public class AllNodesDone implements WaitPredicate {
+public class AllNodesVoted implements WaitPredicate {
 
-    private static final Logger LOG = LoggerFactory.getLogger(AllNodesDone.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AllNodesVoted.class);
 
     private final TestingService testingService;
 
-    public AllNodesDone(final TestingService testingService) {
+    public AllNodesVoted(final TestingService testingService) {
         this.testingService = testingService;
     }
 
@@ -34,6 +32,6 @@ public class AllNodesDone implements WaitPredicate {
 
     @Override
     public String describe() {
-        return "allNodesDone";
+        return "allNodesVoted";
     }
 }

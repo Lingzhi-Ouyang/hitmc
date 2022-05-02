@@ -299,6 +299,7 @@ public class LearnerHandler extends Thread {
                 leader.waitForEpochAck(this.getSid(), ss);
             }
             peerLastZxid = ss.getLastZxid();
+            LOG.debug("------------peerLastZxid: {}", peerLastZxid);
             
             /* the default to send to the follower */
             int packetToSend = Leader.SNAP;
@@ -387,6 +388,7 @@ public class LearnerHandler extends Thread {
                 }               
 
                 leaderLastZxid = leader.startForwarding(this, updates);
+                LOG.debug("----------------leaderLastZxid: {}, peerLastZxid: {}", leaderLastZxid, peerLastZxid);
                 if (peerLastZxid == leaderLastZxid) {
                     LOG.debug("Leader and follower are in sync, sending empty diff. zxid=0x{}",
                             Long.toHexString(leaderLastZxid));

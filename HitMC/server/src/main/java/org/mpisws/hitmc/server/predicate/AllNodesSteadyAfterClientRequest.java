@@ -27,6 +27,7 @@ public class AllNodesSteadyAfterClientRequest implements WaitPredicate {
 
     @Override
     public boolean isTrue() {
+        // TODO: is it needed to combine AllNodesSteady?
         for (int nodeId = 0; nodeId < testingService.getSchedulerConfiguration().getNumNodes(); ++nodeId) {
             final NodeState nodeState = testingService.getNodeStates().get(nodeId);
             switch (nodeState) {
@@ -61,9 +62,20 @@ public class AllNodesSteadyAfterClientRequest implements WaitPredicate {
     }
 
     private boolean leaderSteadyAfterClientRequest(final int nodeId) {
+        boolean syncExisted = false;
+        // Note: learnerHandlerSender is created by learnerHandler so here we do not make a flag for learnerHandler
+        boolean learnerHandlerSenderExisted = false;
         for (final Subnode subnode : testingService.getSubnodeSets().get(nodeId)) {
-            if (SubnodeType.SYNC_PROCESSOR.equals(subnode.getSubnodeType()) ||
-                    SubnodeType.LEARNER_HANDLER_SENDER.equals(subnode.getSubnodeType())) {
+            if (SubnodeType.SYNC_PROCESSOR.equals(subnode.getSubnodeType())) {
+                syncExisted = true;
+                if (!SubnodeState.SENDING.equals(subnode.getState())) {
+                    LOG.debug("------Not steady for leader's {} thread-----" +
+                                    "Node {} subnode {} status: {}",
+                            subnode.getSubnodeType(), nodeId, subnode.getId(), subnode.getState());
+                    return false;
+                }
+            } else if (SubnodeType.LEARNER_HANDLER_SENDER.equals(subnode.getSubnodeType())) {
+                learnerHandlerSenderExisted = true;
                 if (!SubnodeState.SENDING.equals(subnode.getState())) {
                     LOG.debug("------Not steady for leader's {} thread-----" +
                                     "Node {} subnode {} status: {}",
@@ -76,9 +88,11 @@ public class AllNodesSteadyAfterClientRequest implements WaitPredicate {
                         subnode.getSubnodeType(), nodeId, subnode.getId(), subnode.getState());
                 return false;
             }
-
             LOG.debug("-----------Leader node {} subnode {} status: {}, subnode type: {}",
                         nodeId, subnode.getId(), subnode.getState(), subnode.getSubnodeType());
+        }
+        if (!syncExisted && !learnerHandlerSenderExisted) {
+            return false;
         }
         return true;
     }

@@ -183,46 +183,29 @@ public class TestingService implements TestingRemoteService {
             statisticsWriter = new FileWriter(schedulerConfiguration.getWorkingDir() + File.separator
                     + executionId + File.separator + schedulerConfiguration.getStatisticsFile());
 
-            // configure the execution before election
+            // configure the execution before first election
             configureNextExecution();
-
+            // start the ensemble at the beginning of the execution
             ensemble.startEnsemble();
-
             executionWriter.write("-----Initialization cost time: " + (System.currentTimeMillis() - startTime) + "\n\n");
 
-            // Step 0
-            // execution of first election
+            // Start the timer for recoding statistics
             statistics.startTimer();
+
+            // PRE: first election
             totalExecuted = scheduleFirstElection(totalExecuted);
-            statistics.endTimer();
 
-            // TODO: property check : They all have lastProcessedZxid=0
-            statistics.reportTotalExecutedEvents(totalExecuted);
-            leaderElectionVerifier.verify();
-            statisticsWriter.write(statistics.toString() + "\n\n");
-            LOG.info(statistics.toString());
-            LOG.debug("\n\n\n\n\n");
-
-            // trigger DIFF
+            // 1. trigger DIFF
             configureClientRequests();
             totalExecuted = triggerDiff(totalExecuted);
-            statistics.endTimer();
 
-            // TODO: property check : S0 writes PROPOSAL T(zxid=1) to the datafile. Neither S1 or S2 receives PROPOSAL T(zxid=1).
-            statistics.reportTotalExecutedEvents(totalExecuted);
-            leaderElectionVerifier.verify();
-            statisticsWriter.write(statistics.toString() + "\n\n");
-            LOG.debug("\n\n\n\n\n");
-            LOG.info(statistics.toString());
-            LOG.debug("\n\n\n\n\n");
-
-            // phantom read
-
-            executionWriter.close();
-            statisticsWriter.close();
+            // 2. phantom read
 
             zkClient.deregister();
             ensemble.stopEnsemble();
+
+            executionWriter.close();
+            statisticsWriter.close();
         }
         LOG.debug("total time: {}" , (System.currentTimeMillis() - startTime));
     }
@@ -434,9 +417,9 @@ public class TestingService implements TestingRemoteService {
 //                ClientRequestType.SET_DATA, clientRequestExecutor);
 //        addEvent(setDataEvent);
 
-//        // Reconfigure executors
-//        nodeStartExecutor = new NodeStartExecutor(this, executionWriter, schedulerConfiguration.getNumRebootsAfterElection());
-//        nodeCrashExecutor = new NodeCrashExecutor(this, executionWriter, schedulerConfiguration.getNumCrashesAfterElection());
+        // Reconfigure executors
+        nodeStartExecutor = new NodeStartExecutor(this, schedulerConfiguration.getNumRebootsAfterElection());
+        nodeCrashExecutor = new NodeCrashExecutor(this, schedulerConfiguration.getNumCrashesAfterElection());
 //
 //        // Generate node crash events
 //        if (schedulerConfiguration.getNumCrashes() > 0) {
@@ -458,15 +441,23 @@ public class TestingService implements TestingRemoteService {
                 waitAllNodesSteady();
                 while (schedulingStrategy.hasNextEvent() && totalExecuted < 100) {
                     long begintime = System.currentTimeMillis();
-                    LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted);
+                    LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted + 1);
                     final Event event = schedulingStrategy.nextEvent();
                     if (event.execute()) {
                         ++totalExecuted;
                         recordProperties(totalExecuted, begintime, event);
                     }
                 }
-                waitAllNodesDone();
+                // wait whenever an election ends
+                waitAllNodesVoted();
             }
+            statistics.endTimer();
+            // check election results
+            leaderElectionVerifier.verify();
+            // report statistics
+            statistics.reportTotalExecutedEvents(totalExecuted);
+            statisticsWriter.write(statistics.toString() + "\n\n");
+            LOG.info(statistics.toString() + "\n\n\n\n\n");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -523,7 +514,7 @@ public class TestingService implements TestingRemoteService {
                         executionWriter.write("------cost_time: " + costTime + "\n");
                     }
                 }
-                waitAllNodesDone();
+                waitAllNodesVoted();
             }
 
         } catch (IOException e) {
@@ -597,7 +588,7 @@ public class TestingService implements TestingRemoteService {
 //                    LOG.debug("executed event: {}", nodeCrashEvent1.toString());
 //                }
 
-                waitAllNodesDone();
+                waitAllNodesVoted();
             }
 
         } catch (IOException e) {
@@ -612,40 +603,130 @@ public class TestingService implements TestingRemoteService {
     private int triggerDiff(int totalExecuted) {
         try {
             synchronized (controlMonitor) {
-                waitAllNodesSteady();
+                // last event executor has waited for all nodes steady
+                // waitAllNodesSteady();
 
-                // Step 1. client request SET_DATA
-                long begintime = System.currentTimeMillis();
-                final ClientRequestEvent clientRequestEvent = new ClientRequestEvent(generateEventId(),
+                // PRE
+                // >> client set request
+                long startTime = System.currentTimeMillis();
+                Event event = new ClientRequestEvent(generateEventId(),
                         ClientRequestType.SET_DATA, clientRequestExecutor);
                 LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted + 1);
-                LOG.debug("prepare to execute event: {}", clientRequestEvent.toString());
-                if (clientRequestEvent.execute()) {
+                LOG.debug("prepare to execute event: {}", event);
+                if (event.execute()) {
                     ++totalExecuted;
-                    recordProperties(totalExecuted, begintime, clientRequestEvent);
+                    recordProperties(totalExecuted, startTime, event);
                 }
 
-                // Step 2. Leader crash
-                // Step 3. Leader restart
-                // Step 4. re-election and becomes leader.
-
-                // This part is for random test
                 while (schedulingStrategy.hasNextEvent() && totalExecuted < 100) {
-                    begintime = System.currentTimeMillis();
-                    final Event event = schedulingStrategy.nextEvent();
+                    startTime = System.currentTimeMillis();
+                    event = schedulingStrategy.nextEvent();
+                    LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted + 1);
+                    LOG.debug("prepare to execute event: {}", event.toString());
+                    if (event.execute()) {
+                        ++totalExecuted;
+                        recordProperties(totalExecuted, startTime, event);
+                    }
+                }
+
+                // TODO: check quorum nodes has updated lastProcessedZxid whenever a client mutation is done
+//                waitQuorumZxidUpdated();
+
+                // make DIFF: client set >> leader log >> leader restart >> re-election
+                // Step 1. client request SET_DATA
+                startTime = System.currentTimeMillis();
+                event = new ClientRequestEvent(generateEventId(),
+                        ClientRequestType.SET_DATA, clientRequestExecutor);
+                LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted + 1);
+                LOG.debug("prepare to execute event: {}", event);
+                if (event.execute()) {
+                    ++totalExecuted;
+                    recordProperties(totalExecuted, startTime, event);
+                }
+
+                // Step 2. leader log
+                startTime = System.currentTimeMillis();
+                event = schedulingStrategy.nextEvent();
+                while (!(event instanceof LogRequestEvent)){
+                    LOG.debug("-------need LogRequestEvent! get event: {}", event);
+                    addEvent(event);
+                    event = schedulingStrategy.nextEvent();
+                }
+                LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted + 1);
+                LOG.debug("prepare to execute event: {}", event);
+                if (event.execute()) {
+                    ++totalExecuted;
+                    recordProperties(totalExecuted, startTime, event);
+                }
+
+                // Step 3. Leader crash
+                startTime = System.currentTimeMillis();
+                // find leader
+                int leader = -1;
+                for (int nodeId = 0; nodeId < schedulerConfiguration.getNumNodes(); ++nodeId) {
+                    if (LeaderElectionState.LEADING.equals(leaderElectionStates.get(nodeId))) {
+                        leader = nodeId;
+                        LOG.debug("-----current leader: {}", leader);
+                        break;
+                    }
+                }
+                event = new NodeCrashEvent(generateEventId(), leader, nodeCrashExecutor);
+                LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted + 1);
+                LOG.debug("prepare to execute event: {}", event);
+                if (event.execute()) {
+                    ++totalExecuted;
+                    recordProperties(totalExecuted, startTime, event);
+                }
+
+                // Step 4. Leader restart
+                // >> This is the only enabled event now
+                // Step 5. re-election and becomes leader
+                // >> This part is also for random test
+                while (schedulingStrategy.hasNextEvent() && totalExecuted < 100) {
+                    startTime = System.currentTimeMillis();
+                    event = schedulingStrategy.nextEvent();
+                    LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted + 1);
+                    LOG.debug("prepare to execute event: {}", event.toString());
+                    if (event.execute()) {
+                        ++totalExecuted;
+                        recordProperties(totalExecuted, startTime, event);
+                    }
+                }
+                // wait whenever an election ends
+                waitAllNodesVoted();
+                // check election results
+                leaderElectionVerifier.verify();
+                // TODO: check the original leader becomes the new leader again. o.w. repeat Step 4-5
+                // TODO: check DIFF
+
+                // Step POST. client request SET_DATA
+                startTime = System.currentTimeMillis();
+                event = new ClientRequestEvent(generateEventId(),
+                        ClientRequestType.SET_DATA, clientRequestExecutor);
+                LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted + 1);
+                LOG.debug("prepare to execute event: {}", event);
+                if (event.execute()) {
+                    ++totalExecuted;
+                    recordProperties(totalExecuted, startTime, event);
+                }
+
+                while (schedulingStrategy.hasNextEvent() && totalExecuted < 100) {
+                    startTime = System.currentTimeMillis();
+                    event = schedulingStrategy.nextEvent();
                     LOG.debug("\n\n\n\n\n---------------------------Step: {}--------------------------", totalExecuted);
                     LOG.debug("prepare to execute event: {}", event.toString());
                     if (event.execute()) {
                         ++totalExecuted;
-                        recordProperties(totalExecuted, begintime, event);
+                        recordProperties(totalExecuted, startTime, event);
                     }
                 }
-                executionWriter.write("\n");
-
-                // Wait util all nodes are done before property check
-                waitAllNodesDone();
             }
-
+            statistics.endTimer();
+            // TODO: property check : S0 writes PROPOSAL T(zxid=1) to the datafile. Neither S1 or S2 receives PROPOSAL T(zxid=1).
+//            leaderElectionVerifier.verify();
+            statistics.reportTotalExecutedEvents(totalExecuted);
+            statisticsWriter.write(statistics.toString() + "\n\n");
+            LOG.info(statistics.toString() + "\n\n\n\n\n");
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -1075,7 +1156,7 @@ public class TestingService implements TestingRemoteService {
     }
 
     /***
-     * Called by the executor the network partition
+     * Called by the partition start executor
      * @return
      */
     public void startPartition(final int node1, final int node2) {
@@ -1094,6 +1175,10 @@ public class TestingService implements TestingRemoteService {
         controlMonitor.notifyAll();
     }
 
+    /***
+     * Called by the partition stop executor
+     * @return
+     */
     public void stopPartition(final int node1, final int node2) {
         // 1. PRE_EXECUTION: set unstable state (set STARTING)
         nodeStates.set(node1, NodeState.STARTING);
@@ -1219,13 +1304,13 @@ public class TestingService implements TestingRemoteService {
         wait(allNodesSteady, 0L);
     }
 
-    private final WaitPredicate allNodesDone = new AllNodesDone(this);
+    private final WaitPredicate allNodesVoted = new AllNodesVoted(this);
     // Should be called while holding a lock on controlMonitor
-    private void waitAllNodesDone() {
-        wait(allNodesDone, 1000L);
+    private void waitAllNodesVoted() {
+        wait(allNodesVoted, 1000L);
     }
-    private void waitAllNodesDone(final long timeout) {
-        wait(allNodesDone, timeout);
+    private void waitAllNodesVoted(final long timeout) {
+        wait(allNodesVoted, timeout);
     }
 
     private final WaitPredicate allNodesSteadyForClientMutation = new AllNodesSteadyForClientMutation(this);
