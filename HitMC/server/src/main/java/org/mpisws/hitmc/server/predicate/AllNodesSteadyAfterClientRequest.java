@@ -91,10 +91,7 @@ public class AllNodesSteadyAfterClientRequest implements WaitPredicate {
             LOG.debug("-----------Leader node {} subnode {} status: {}, subnode type: {}",
                         nodeId, subnode.getId(), subnode.getState(), subnode.getSubnodeType());
         }
-        if (!syncExisted && !learnerHandlerSenderExisted) {
-            return false;
-        }
-        return true;
+        return syncExisted && learnerHandlerSenderExisted;
     }
 
     private boolean followerSteadyAfterClientRequest(final int nodeId) {
